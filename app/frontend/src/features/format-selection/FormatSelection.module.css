@@ -1,0 +1,212 @@
+.page { min-height: 100dvh; display: flex; flex-direction: column; }
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-8);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.logo { display: flex; align-items: center; gap: var(--space-2); }
+.logoIcon { font-size: 20px; }
+.logoText { font-size: 16px; font-weight: 700; color: var(--color-primary); }
+
+.steps { display: flex; align-items: center; gap: var(--space-2); }
+
+.step { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--color-text-muted); }
+.stepNum {
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  font-size: 12px; font-weight: 600;
+  background: var(--color-border);
+  color: var(--color-text-muted);
+}
+.stepDone .stepNum { background: var(--color-success-light); color: var(--color-success); }
+.stepActive .stepLabel { color: var(--color-text); font-weight: 600; }
+.stepActive .stepNum { background: var(--color-primary); color: #fff; }
+
+.main {
+  flex: 1;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: var(--space-10) var(--space-6);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.heading { }
+.title { font-size: 26px; font-weight: 700; letter-spacing: -0.3px; }
+.subtitle { margin-top: var(--space-2); font-size: 15px; color: var(--color-text-secondary); max-width: 620px; }
+
+/* ---- Template grid ---- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--space-4);
+}
+
+.templateCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+
+.checkBadge {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  color: var(--color-primary);
+  line-height: 0;
+}
+
+.cardHeader { display: flex; align-items: baseline; gap: var(--space-3); }
+.templateName { font-size: 16px; font-weight: 700; }
+.standard { font-size: 12px; color: var(--color-text-muted); }
+
+.description { font-size: 14px; color: var(--color-text-secondary); line-height: 1.5; }
+
+.cardMeta { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-top: auto; }
+.sectionCount { font-size: 12px; font-weight: 600; color: var(--color-text-muted); padding: 2px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-full); }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag { padding: 2px 8px; background: var(--color-surface-2); border-radius: var(--radius-full); font-size: 11px; color: var(--color-text-secondary); }
+
+.customizeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--space-2);
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+  align-self: flex-start;
+}
+.customizeBtn:hover { opacity: 0.8; }
+
+/* ---- Custom "Define your own" card ---- */
+.customCard {
+  min-height: 160px;
+  justify-content: center;
+  border-style: dashed !important;
+}
+.customCardBody {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  padding: var(--space-4);
+}
+.customIcon { color: var(--color-primary); opacity: 0.7; }
+.customLabel { font-size: 15px; font-weight: 700; }
+.customSub { font-size: 13px; color: var(--color-text-secondary); max-width: 220px; }
+
+/* ---- Section editor ---- */
+.editor {
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.editorHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+.editorHint {
+  margin-inline-start: auto;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.sectionList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sectionItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 12px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  user-select: none;
+}
+.sectionItem:active { cursor: grabbing; }
+.grip { color: var(--color-text-muted); flex-shrink: 0; }
+.sectionNum {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+.sectionName { flex: 1; font-size: 14px; }
+.removeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  border-radius: 50%;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.removeBtn:hover { background: var(--color-danger-light, #fee2e2); color: var(--color-danger); }
+
+.addRow {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+.addInput {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: var(--font-ui);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  transition: border-color var(--transition-fast);
+}
+.addInput:focus { outline: none; border-color: var(--color-primary); background: #fff; }
+
+.emptyHint { font-size: 13px; color: var(--color-danger); text-align: center; }
+
+/* ---- Actions bar ---- */
+.actions { display: flex; justify-content: space-between; align-items: center; padding-top: var(--space-4); }

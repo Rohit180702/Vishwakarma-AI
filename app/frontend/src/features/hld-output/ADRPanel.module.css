@@ -1,0 +1,210 @@
+.panel {
+  padding: var(--space-8);
+  max-width: 860px;
+  margin: 0 auto;
+  font-family: var(--font-ui);
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.panelMeta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.panelTitle {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.adrCount {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  background: var(--color-surface-2);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+}
+
+.downloadBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  border: 1.5px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+.downloadBtn:hover { opacity: 0.8; }
+
+.panelHint {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-6);
+  line-height: 1.6;
+}
+.panelHint code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.adrList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.adrCard {
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.adrHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-surface);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-ui);
+  transition: background var(--transition-fast);
+}
+.adrHeader:hover { background: var(--color-surface-2); }
+
+.adrId {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-primary);
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--color-primary-light);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+.adrTitle { flex: 1; font-size: 14px; font-weight: 600; color: var(--color-text); }
+.adrStatus { font-size: 12px; font-weight: 600; white-space: nowrap; }
+.costBand { font-size: 12px; color: var(--color-text-muted); font-family: 'JetBrains Mono', monospace; }
+.adrToggle { font-size: 10px; color: var(--color-text-muted); }
+
+.adrBody {
+  padding: var(--space-5) var(--space-5);
+  background: var(--color-surface-2);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.adrSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.adrLabel {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--color-text-muted);
+}
+
+.adrText {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.decision {
+  font-weight: 500;
+  color: var(--color-text);
+  border-left: 3px solid var(--color-primary);
+  padding-left: var(--space-3);
+  background: var(--color-primary-light);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: var(--space-2) var(--space-3);
+}
+
+.altGrid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.altCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+
+.altName {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text);
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.prosList,
+.consList {
+  margin: 4px 0 0 0;
+  padding: 0 0 0 16px;
+  list-style: none;
+}
+
+.prosList li {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #16a34a;
+  padding-left: 2px;
+}
+.prosList li::before { content: '+ '; font-weight: 700; }
+
+.consList li {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #dc2626;
+  padding-left: 2px;
+}
+.consList li::before { content: '− '; font-weight: 700; }
+
+.consequencesRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.empty {
+  padding: var(--space-10);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: 14px;
+}

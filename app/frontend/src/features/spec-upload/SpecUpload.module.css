@@ -1,0 +1,185 @@
+/* ── Page ── */
+.page { min-height: 100dvh; display: flex; flex-direction: column; background: #f0f2f5; }
+
+/* ── Header ── */
+.header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 14px 36px;
+  background: #fff; border-bottom: 1px solid #e5e7eb;
+  position: sticky; top: 0; z-index: 10;
+}
+.logo { display: flex; align-items: center; gap: 8px; }
+.logoGlyph { font-size: 20px; }
+.logoText { font-size: 16px; font-weight: 800; color: #1e1b4b; letter-spacing: -0.4px; }
+
+
+/* ── Main ── */
+.main {
+  flex: 1; max-width: 600px; width: 100%;
+  margin: 0 auto; padding: 56px 24px 40px;
+  display: flex; flex-direction: column; gap: 24px;
+  align-items: center;
+}
+
+/* ── Hero ── */
+.hero { text-align: center; }
+.title {
+  font-size: 32px; font-weight: 800; color: #111827;
+  letter-spacing: -0.8px; margin: 0 0 12px;
+}
+.subtitle { font-size: 16px; color: #6b7280; line-height: 1.6; margin: 0; }
+
+/* ── Saved banner ── */
+.savedBanner {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 12px 18px;
+  background: #f0fdf4; border: 1.5px solid #10b981; border-radius: 12px;
+  font-size: 14px; color: #065f46; font-weight: 500;
+}
+.savedDot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #10b981; flex-shrink: 0;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── Error banner ── */
+.errorBanner {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 12px 18px;
+  background: #fef2f2; border: 1.5px solid #fca5a5; border-radius: 12px;
+  font-size: 14px; color: #991b1b;
+}
+
+/* ── Upload card ── */
+.uploadCard { width: 100%; }
+
+.reading {
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  padding: 48px; font-size: 15px; color: #6b7280;
+}
+.readingSpinner {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 3px solid #e5e7eb; border-top-color: #6366f1;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.dropzone {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 48px 32px;
+  border: 2px dashed #d1d5db; border-radius: 20px;
+  background: #fff; cursor: pointer; text-align: center;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+}
+.dropzone:hover, .dragging {
+  border-color: #6366f1; background: #f5f3ff;
+  box-shadow: 0 4px 24px rgba(99,102,241,0.12);
+}
+.uploadIcon { color: #6366f1; opacity: .7; }
+.dropLabel { font-size: 17px; font-weight: 700; color: #374151; margin: 0; }
+.dropSub   { font-size: 14px; color: #9ca3af; margin: 0; }
+
+.formatPills { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.pill {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600; color: #6b7280;
+  background: #f3f4f6; border: 1px solid #e5e7eb;
+  padding: 3px 10px; border-radius: 999px;
+}
+
+.browseBtn {
+  margin-top: 6px; padding: 8px 22px;
+  background: #6366f1; color: #fff;
+  font-size: 14px; font-weight: 700; border-radius: 10px;
+  transition: background .12s;
+}
+.dropzone:hover .browseBtn { background: #4f46e5; }
+.hiddenInput { display: none; }
+
+/* ── Divider ── */
+.divider {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+}
+.divider span:first-child, .divider span:last-child {
+  flex: 1; height: 1px; background: #e5e7eb;
+}
+.dividerText { font-size: 13px; color: #9ca3af; white-space: nowrap; }
+
+/* ── Interview shortcut ── */
+.interviewShortcut {
+  display: flex; align-items: center; gap: 16px;
+  width: 100%; padding: 18px 22px;
+  background: #fff; border: 1.5px solid #e5e7eb; border-radius: 16px;
+  cursor: pointer; text-align: left;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+.interviewShortcut:hover {
+  border-color: #6366f1; background: #f5f3ff;
+  box-shadow: 0 4px 16px rgba(99,102,241,0.1);
+}
+.interviewIcon { color: #6366f1; flex-shrink: 0; }
+.interviewShortcutText { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.interviewShortcutTitle { font-size: 15px; font-weight: 700; color: #111827; }
+.interviewShortcutSub   { font-size: 13px; color: #6b7280; }
+.interviewArrow { font-size: 18px; color: #6366f1; font-weight: 700; flex-shrink: 0; }
+
+.hint { font-size: 13px; color: #9ca3af; text-align: center; }
+
+/* ── Recent sessions ── */
+.sessions { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+
+.sessionsHeader {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.6px; color: #9ca3af;
+}
+
+.sessionsList { display: flex; flex-direction: column; gap: 6px; }
+
+.sessionItem {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 12px 16px;
+  background: #fff; border: 1.5px solid #e5e7eb; border-radius: 12px;
+  cursor: pointer; text-align: left;
+  font-family: inherit;
+  transition: border-color .15s, background .15s;
+}
+.sessionItem:hover { border-color: #6366f1; background: #f5f3ff; }
+
+.sessionFileIcon { color: #6366f1; flex-shrink: 0; }
+
+.sessionName {
+  flex: 1; font-size: 14px; font-weight: 600; color: #111827;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.sessionMeta {
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+
+.sessionTemplate {
+  font-size: 11px; font-weight: 700; color: #6366f1;
+  background: #eef2ff; border: 1px solid #c7d2fe;
+  padding: 2px 8px; border-radius: 999px;
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+
+.sessionDate { font-size: 12px; color: #9ca3af; }
+
+.sessionArrow { color: #c7d2fe; flex-shrink: 0; }
+.sessionItem:hover .sessionArrow { color: #6366f1; }
+
+.sessionDelete {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 6px;
+  border: none; background: transparent; color: #9ca3af;
+  cursor: pointer; flex-shrink: 0;
+  transition: color .12s, background .12s;
+}
+.sessionDelete:hover { color: #dc2626; background: #fee2e2; }
