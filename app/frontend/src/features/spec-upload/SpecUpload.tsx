@@ -1,23 +1,28 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { UploadCloud, FileText, AlertCircle, Image, FilePlus2, Clock, Trash2, ArrowRight } from 'lucide-react'
+import { UploadCloud, FileText, AlertCircle, Image, FilePlus2, Clock, Trash2, ArrowRight, X } from 'lucide-react'
 import { FlowStepper } from '@/components/FlowStepper/FlowStepper'
-import { listSessions, loadSession, deleteSession } from '@/api/client'
-import type { SessionSummary } from '@/api/client'
+import { listSessions, loadSession, deleteSession, uploadSpecFiles } from '@/api/client'
+import type { SessionSummary, UploadedDocumentInfo } from '@/api/client'
 import type { HLDDocument, HLDTemplate } from '@/types'
 import styles from './SpecUpload.module.css'
 
 interface SpecUploadProps {
-  onReady: (specText: string) => void
+  onReady: (specText: string, sessionId?: string) => void
   onLoadSession: (spec: string, template: HLDTemplate, hld: HLDDocument) => void
 }
 
-type UploadState = 'idle' | 'dragging' | 'reading' | 'error'
+type UploadState = 'idle' | 'dragging' | 'reading' | 'uploading' | 'error'
+
+interface FileWithPreview {
+  file: File
+  id: string
+}
 
 export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
-  const [state, setState]       = useState<UploadState>('idle')
+  const [state, setState] = useState<UploadState>('idle')
   const [errorMsg, setErrorMsg] = useState('')
-  const [savedFile, setSavedFile] = useState<string | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<FileWithPreview[]>([])
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const navigate = useNavigate()
 
@@ -39,38 +44,64 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
   const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
     await deleteSession(id)
-    setSessions(prev => prev.filter(s => s.id !== id))
+    setSessions((prev: SessionSummary[]) => prev.filter((s: SessionSummary) => s.id !== id))
   }
 
-  const handleFile = useCallback(async (file: File) => {
-    setState('reading')
+  const addFiles = useCallback((files: FileList | null) => {
+    if (!files) return
+
+    const fileArray = Array.from(files)
+    const validFiles = fileArray.filter(file => {
+      const ext = file.name.split('.').pop()?.toLowerCase()
+      return ext && ['md', 'txt', 'docx', 'pdf'].includes(ext)
+    })
+
+    if (validFiles.length === 0) {
+      setErrorMsg('Please upload valid files (.md, .txt, .docx, .pdf)')
+      setState('error')
+      return
+    }
+
+    const newFiles = validFiles.map(file => ({
+      file,
+      id: crypto.randomUUID(),
+    }))
+
+    setSelectedFiles(prev => [...prev, ...newFiles])
+    setState('idle')
+    setErrorMsg('')
+  }, [])
+
+  const removeFile = (id: string) => {
+    setSelectedFiles(prev => prev.filter(f => f.id !== id))
+  }
+
+  const handleUpload = useCallback(async () => {
+    if (selectedFiles.length === 0) return
+
+    setState('uploading')
     try {
-      const text = await file.text()
-      if (text.trim().length < 50) {
-        setErrorMsg('Spec is too short — paste or upload a meaningful document.')
-        setState('error')
-        return
-      }
-      onReady(text)
-      setSavedFile(file.name)
+      const files = selectedFiles.map(f => f.file)
+      const response = await uploadSpecFiles(files)
+
+      onReady(response.unified_spec_text, response.session_id)
       setState('idle')
       setTimeout(() => navigate('/interview'), 800)
-    } catch {
-      setErrorMsg('Could not read file. Try pasting the text instead.')
+    } catch (error) {
+      console.error('Upload failed:', error)
+      setErrorMsg('Failed to upload and parse documents. Please try again.')
       setState('error')
     }
-  }, [navigate, onReady])
+  }, [selectedFiles, onReady, navigate])
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setState('idle')
-    const file = e.dataTransfer.files[0]
-    if (file) handleFile(file)
-  }, [handleFile])
+    addFiles(e.dataTransfer.files)
+  }, [addFiles])
 
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) handleFile(file)
+    addFiles(e.target.files)
   }
 
   return (
@@ -93,14 +124,6 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
           </p>
         </div>
 
-        {/* Saved indicator */}
-        {savedFile && (
-          <div className={styles.savedBanner}>
-            <span className={styles.savedDot} />
-            <span>Saved as <code>input.md</code> — continuing to Interview…</span>
-          </div>
-        )}
-
         {state === 'error' && (
           <div className={styles.errorBanner} role="alert">
             <AlertCircle size={15} />
@@ -109,23 +132,23 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
         )}
 
         <div className={styles.uploadCard}>
-          {state === 'reading' ? (
+          {state === 'uploading' ? (
             <div className={styles.reading}>
               <span className={styles.readingSpinner} />
-              <span>Reading your specification…</span>
+              <span>Uploading and parsing documents…</span>
             </div>
           ) : (
             <label
               htmlFor="spec-file"
               className={`${styles.dropzone} ${state === 'dragging' ? styles.dragging : ''}`}
-              onDragOver={e => { e.preventDefault(); setState('dragging') }}
+              onDragOver={(e: React.DragEvent) => { e.preventDefault(); setState('dragging') }}
               onDragLeave={() => setState('idle')}
               onDrop={onDrop}
             >
               <UploadCloud size={44} strokeWidth={1.3} className={styles.uploadIcon} />
-              <p className={styles.dropLabel}>Drag &amp; drop your specification</p>
+              <p className={styles.dropLabel}>Drag &amp; drop your specification files</p>
               <p className={styles.dropSub}>
-                .txt · .md · .docx · .pdf
+                Multiple files supported: .txt · .md · .docx · .pdf
               </p>
               <div className={styles.formatPills}>
                 <span className={styles.pill}><FileText size={11} /> Markdown</span>
@@ -137,12 +160,65 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
                 id="spec-file"
                 type="file"
                 accept=".txt,.md,.docx,.pdf"
+                multiple
                 className={styles.hiddenInput}
                 onChange={onInputChange}
               />
             </label>
           )}
         </div>
+
+        {/* Selected files list */}
+        {selectedFiles.length > 0 && (
+          <div className={styles.sessions} style={{ marginTop: '24px' }}>
+            <div className={styles.sessionsHeader}>
+              <FileText size={13} />
+              <span>Selected Files ({selectedFiles.length})</span>
+            </div>
+            <div className={styles.sessionsList}>
+              {selectedFiles.map((fileItem: FileWithPreview) => (
+                <div key={fileItem.id} className={styles.sessionItem} style={{ cursor: 'default' }}>
+                  <FileText size={14} className={styles.sessionFileIcon} />
+                  <span className={styles.sessionName}>{fileItem.file.name}</span>
+                  <span className={styles.sessionMeta}>
+                    <span className={styles.sessionTemplate}>
+                      {(fileItem.file.size / 1024).toFixed(1)} KB
+                    </span>
+                  </span>
+                  <button
+                    className={styles.sessionDelete}
+                    onClick={(e: React.MouseEvent) => {
+                      e.stopPropagation()
+                      removeFile(fileItem.id)
+                    }}
+                    title="Remove file"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={handleUpload}
+              disabled={state === 'uploading'}
+              style={{
+                width: '100%',
+                marginTop: '16px',
+                padding: '12px 24px',
+                backgroundColor: 'var(--accent)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: state === 'uploading' ? 'not-allowed' : 'pointer',
+                opacity: state === 'uploading' ? 0.6 : 1,
+              }}
+            >
+              {state === 'uploading' ? 'Uploading...' : 'Upload and Continue'}
+            </button>
+          </div>
+        )}
 
         <p className={styles.hint}>No account needed · spec stays in your session</p>
 
@@ -185,4 +261,3 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
     </div>
   )
 }
-

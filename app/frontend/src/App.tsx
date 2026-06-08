@@ -8,12 +8,16 @@ import { HLDOutput } from '@/features/hld-output'
 
 export function App() {
   const [specText, setSpecText]     = useState('')
+  const [sessionId, setSessionId]   = useState<string | null>(null)
   const [template, setTemplate]     = useState<HLDTemplate | null>(null)
   const [customSections, setCustomSections]         = useState<string[] | undefined>()
   const [customTemplateText, setCustomTemplateText] = useState<string | undefined>()
   const [preloadedHld, setPreloadedHld]             = useState<HLDDocument | null>(null)
 
-  const handleSpecReady = (text: string) => setSpecText(text)
+  const handleSpecReady = (text: string, sessionId?: string) => {
+    setSpecText(text)
+    if (sessionId) setSessionId(sessionId)
+  }
 
   const handleFormatSelected = (t: HLDTemplate, sections?: string[], tmplText?: string) => {
     setTemplate(t)
@@ -42,8 +46,8 @@ export function App() {
       <Route
         path="/interview"
         element={
-          specText
-            ? <InterviewPage uploadedSpec={specText} onSpecReady={handleSpecReady} />
+          specText && sessionId
+            ? <InterviewPage sessionId={sessionId} onSpecReady={handleSpecReady} />
             : <Navigate to="/" replace />
         }
       />

@@ -2,19 +2,22 @@
 GET  /api/v1/sessions        → list all past HLD sessions (summary only)
 GET  /api/v1/sessions/:id    → load full HLD JSON for a session
 POST /api/v1/sessions        → save a newly generated HLD session
+POST /api/v1/sessions/upload → upload and parse specification documents
 DELETE /api/v1/sessions/:id  → delete a session
 """
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from pydantic import BaseModel
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from infrastructure.database import HLDSession, get_session
+from infrastructure.database import HLDSession, UploadedDocument, get_session
+from infrastructure.parser import DocumentParser
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -50,6 +53,20 @@ class SaveSessionRequest(BaseModel):
     template: str
     spec_text: str
     hld_json: str
+
+
+class UploadedDocumentInfo(BaseModel):
+    filename: str
+    file_type: str
+    size_bytes: int
+    content_preview: str
+
+
+class UploadSessionResponse(BaseModel):
+    session_id: str
+    documents: List[UploadedDocumentInfo]
+    unified_spec_text: str
+    created_at: datetime
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +113,87 @@ async def save_session(
     await db.commit()
     await db.refresh(session)
     return SessionSummary.model_validate(session)
+
+
+@router.post("/upload", response_model=UploadSessionResponse, status_code=status.HTTP_201_CREATED, summary="Upload and parse specification documents")
+async def upload_documents(
+    files: List[UploadFile] = File(...),
+    db: AsyncSession = Depends(get_session),
+) -> UploadSessionResponse:
+    """
+    Upload multiple specification documents, parse them using Docling,
+    store them in the database, and return unified context.
+    """
+    if not files:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No files uploaded")
+
+    try:
+        # Initialize parser
+        parser = DocumentParser()
+
+        # Read and parse files
+        file_data = []
+        for upload_file in files:
+            content = await upload_file.read()
+            file_data.append((upload_file.filename or "untitled", content))
+
+        parsed_docs = parser.parse_uploaded_files(file_data)
+
+        # Create unified context
+        unified_spec_text = parser.create_unified_context(parsed_docs)
+
+        # Create session
+        session_id = str(uuid.uuid4())
+        created_at = datetime.now(timezone.utc)
+
+        # Create HLDSession with placeholder values (will be updated during HLD generation)
+        hld_session = HLDSession(
+            id=session_id,
+            project_name="Untitled Project",  # Placeholder, will be updated
+            template="",  # Placeholder, will be set during format selection
+            spec_text=unified_spec_text,
+            hld_json="{}",  # Placeholder, will be filled during HLD generation
+            created_at=created_at,
+        )
+        db.add(hld_session)
+
+        # Store individual documents
+        for doc in parsed_docs:
+            uploaded_doc = UploadedDocument(
+                session_id=session_id,
+                filename=doc.filename,
+                file_type=doc.file_type,
+                size_bytes=doc.size_bytes,
+                content=doc.content,
+                uploaded_at=created_at,
+            )
+            db.add(uploaded_doc)
+
+        await db.commit()
+
+        # Prepare response
+        doc_infos = [
+            UploadedDocumentInfo(
+                filename=doc.filename,
+                file_type=doc.file_type,
+                size_bytes=doc.size_bytes,
+                content_preview=doc.get_preview(),
+            )
+            for doc in parsed_docs
+        ]
+
+        return UploadSessionResponse(
+            session_id=session_id,
+            documents=doc_infos,
+            unified_spec_text=unified_spec_text,
+            created_at=created_at,
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process documents: {str(e)}"
+        )
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a session")

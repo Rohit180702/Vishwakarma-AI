@@ -19,6 +19,7 @@ build/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+vishwakarma-venv/
 
 # ── Node / frontend ──────────────────────────────────────────────────────────
 node_modules/
