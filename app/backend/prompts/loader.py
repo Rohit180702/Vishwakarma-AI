@@ -11,7 +11,7 @@ This means prompt authors never need to escape {{ or }} inside JSON examples.
 
 Usage:
     from prompts import prompts
-    text = prompts.render("spec_analysis", spec_text=raw)
+    text = prompts.render("hld/system.arc42", spec_text=raw)
 """
 from __future__ import annotations
 

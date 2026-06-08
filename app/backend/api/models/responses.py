@@ -6,22 +6,6 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
-class QualityDimensionOut(BaseModel):
-    id: str
-    label: str
-    score: int
-    feedback: str
-
-
-class AnalyzeSpecResponse(BaseModel):
-    domain: str
-    project_name: str
-    overall_score: int
-    quality_level: str
-    dimensions: list[QualityDimensionOut]
-    missing_inputs: list[str]
-
-
 class C4DiagramOut(BaseModel):
     level: str
     mermaid_syntax: str

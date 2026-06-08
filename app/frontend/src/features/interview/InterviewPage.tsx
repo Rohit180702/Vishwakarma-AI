@@ -90,7 +90,7 @@ export function InterviewPage({ uploadedSpec, onSpecReady }: InterviewPageProps)
     if (isLast) {
       const spec = buildSpec(uploadedSpec, answers)
       onSpecReady(spec)
-      navigate('/analysis')
+      navigate('/format')
     } else {
       setStep(s => s + 1)
       setTimeout(() => textareaRef.current?.focus(), 60)
@@ -114,7 +114,7 @@ export function InterviewPage({ uploadedSpec, onSpecReady }: InterviewPageProps)
         </div>
         <button
           className={styles.skipBtn}
-          onClick={() => { onSpecReady(buildSpec(uploadedSpec, answers)); navigate('/analysis') }}
+          onClick={() => { onSpecReady(buildSpec(uploadedSpec, answers)); navigate('/format') }}
         >
           Skip interview →
         </button>

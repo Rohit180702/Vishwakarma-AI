@@ -1,4 +1,4 @@
-from domain.models import HLDTemplate, SpecQualityLevel
+from domain.models import HLDTemplate
 
 
 # ---------------------------------------------------------------------------
@@ -59,11 +59,4 @@ TEMPLATE_META: dict[HLDTemplate, dict] = {
             ("7", "Rollout Plan"),
         ],
     },
-}
-
-
-QUALITY_LABELS: dict[SpecQualityLevel, str] = {
-    SpecQualityLevel.STRONG: "Strong — ready for HLD generation",
-    SpecQualityLevel.ADEQUATE: "Adequate — HLD possible, some gaps noted",
-    SpecQualityLevel.WEAK: "Weak — generation may produce shallow results",
 }

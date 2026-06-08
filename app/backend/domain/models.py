@@ -20,12 +20,6 @@ class HLDTemplate(str, Enum):
     CUSTOM = "custom"
 
 
-class SpecQualityLevel(str, Enum):
-    STRONG = "strong"       # 80-100 — enough to generate a high-quality HLD
-    ADEQUATE = "adequate"   # 50-79  — gaps exist but generation is possible
-    WEAK = "weak"           # 0-49   — likely to produce a shallow HLD
-
-
 class DiagramLevel(str, Enum):
     CONTEXT = "context"       # C4 L1 — system + external actors
     CONTAINER = "container"   # C4 L2 — services, databases, queues
@@ -35,29 +29,6 @@ class DiagramLevel(str, Enum):
 class MessageRole(str, Enum):
     USER = "user"
     ASSISTANT = "assistant"
-
-
-# ---------------------------------------------------------------------------
-# Spec analysis
-# ---------------------------------------------------------------------------
-
-@dataclass
-class QualityDimension:
-    id: str
-    label: str
-    score: int          # 0–10
-    feedback: str       # one-sentence gap description
-
-
-@dataclass
-class SpecAnalysis:
-    domain: str                           # e.g. "payments", "healthcare"
-    project_name: str
-    overall_score: int                    # 0–100
-    quality_level: SpecQualityLevel
-    dimensions: list[QualityDimension]
-    missing_inputs: list[str]             # checklist items absent from spec
-    raw_text: str                         # original spec for downstream use
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +97,6 @@ class HLDDocument:
     sections: list[HLDSection]
     adrs: list[ADR]
     diagrams: list[C4Diagram]
-    spec_analysis: Optional[SpecAnalysis] = None
     quality_report: Optional[HLDQualityReport] = None
 
 

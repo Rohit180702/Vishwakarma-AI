@@ -1,25 +1,8 @@
 // All shared TypeScript types — mirroring the backend domain models.
 
-export type SpecQualityLevel = 'strong' | 'adequate' | 'weak'
 export type HLDTemplate = 'arc42' | 'c4-adr' | 'rfc-design-doc' | 'custom'
 export type DiagramLevel = 'context' | 'container' | 'component'
 export type MessageRole = 'user' | 'assistant'
-
-export interface QualityDimension {
-  id: string
-  label: string
-  score: number
-  feedback: string
-}
-
-export interface SpecAnalysis {
-  domain: string
-  project_name: string
-  overall_score: number
-  quality_level: SpecQualityLevel
-  dimensions: QualityDimension[]
-  missing_inputs: string[]
-}
 
 export interface HLDSection {
   key: string
@@ -58,7 +41,6 @@ export interface HLDDocument {
   sections: HLDSection[]
   adrs: ADR[]
   diagrams: C4Diagram[]
-  spec_analysis?: SpecAnalysis
 }
 
 export interface ChatMessage {

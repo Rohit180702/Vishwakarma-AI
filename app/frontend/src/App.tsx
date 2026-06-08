@@ -3,7 +3,6 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import type { HLDDocument, HLDTemplate } from '@/types'
 import { SpecUpload } from '@/features/spec-upload/SpecUpload'
 import { InterviewPage } from '@/features/interview/InterviewPage'
-import { SpecAnalysisPage } from '@/features/spec-analysis/SpecAnalysisPage'
 import { FormatSelection } from '@/features/format-selection/FormatSelection'
 import { HLDOutput } from '@/features/hld-output'
 
@@ -49,17 +48,7 @@ export function App() {
         }
       />
 
-      {/* Step 3 — Spec Analysis (dummy) */}
-      <Route
-        path="/analysis"
-        element={
-          specText
-            ? <SpecAnalysisPage specText={specText} />
-            : <Navigate to="/" replace />
-        }
-      />
-
-      {/* Step 4 — Template selection */}
+      {/* Step 3 — Template selection */}
       <Route
         path="/format"
         element={

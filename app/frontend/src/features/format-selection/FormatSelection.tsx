@@ -82,7 +82,7 @@ export function FormatSelection({ onSelected }: FormatSelectionProps) {
           <span className={styles.logoText}>Vishwakarma AI</span>
         </div>
       </header>
-      <FlowStepper current={3} />
+      <FlowStepper current={2} />
 
       <main className={styles.main}>
         <div className={styles.heading}>
@@ -188,7 +188,7 @@ export function FormatSelection({ onSelected }: FormatSelectionProps) {
         )}
 
         <div className={styles.actions}>
-          <Button variant="ghost" onClick={() => navigate('/analysis')}>← Back</Button>
+          <Button variant="ghost" onClick={() => navigate('/')}>← Back</Button>
           <Button
             size="lg"
             disabled={!isReady}

@@ -11,12 +11,6 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # Requests
 # ---------------------------------------------------------------------------
 
-class AnalyzeSpecRequest(BaseModel):
-    spec_text: str = Field(..., min_length=50, description="Raw text of the spec document")
-
-    model_config = {"extra": "forbid"}
-
-
 BUILT_IN_TEMPLATES = {"arc42", "c4-adr", "rfc-design-doc"}
 
 

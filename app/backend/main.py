@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.middleware import register_exception_handlers
-from api.routes import chat, hld, sessions, specs
+from api.routes import chat, hld, sessions
 from config import get_settings
 from infrastructure.database import init_db
 
@@ -41,7 +41,6 @@ def create_app() -> FastAPI:
         await init_db()
         logger.info("Database initialised")
 
-    app.include_router(specs.router, prefix="/api/v1")
     app.include_router(hld.router, prefix="/api/v1")
     app.include_router(chat.router, prefix="/api/v1")
     app.include_router(sessions.router, prefix="/api/v1")

@@ -1,7 +1,7 @@
 import { Check } from 'lucide-react'
 import styles from './FlowStepper.module.css'
 
-const STEPS = ['Upload', 'Interview', 'Analysis', 'Template', 'Generate']
+const STEPS = ['Upload', 'Interview', 'Template', 'Generate']
 
 interface FlowStepperProps {
   /** 0-based index of the currently active step */
