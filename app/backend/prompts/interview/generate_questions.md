@@ -1,32 +1,56 @@
-SPECIFICATION DOCUMENTS:
+SPECIFICATION:
 
 {spec_text}
 
 ---
 
-TASK: Generate exactly 6 critical architectural questions based on the specification above.
+TASK: Analyze this specification and generate the minimum set of high-value architectural questions needed for HLD generation.
 
 ANALYSIS PROCESS:
 
-1. **Read Specification Completely**
-   - Identify what is explicitly stated
-   - Note what is implied or suggested
-   - Mark what is ambiguous or unclear
-   - Recognize what is missing but architecturally critical
+**Step 1: Deep Spec Analysis**
+   - Read specification completely
+   - Identify explicit requirements (clearly stated)
+   - Identify implicit requirements (implied from context)
+   - Mark ambiguous or unclear areas
+   - Recognize what's missing but architecturally critical
 
-2. **Identify Architectural Gaps**
-   - What decisions can't be made confidently from the spec?
-   - What has the biggest architectural impact?
-   - What affects multiple system aspects?
-   - What decisions unlock other decisions?
+**Step 2: Categorize Gaps by Tier**
 
-3. **Prioritize Questions** (Select exactly 6)
-   - Focus on highest impact decisions
-   - Prefer questions that are truly uncertain
+Tier 1 - Business Critical (MUST ask):
+   - System boundaries, core domain
+   - Scale expectations, availability requirements
+   - Security posture, compliance needs
+
+Tier 2 - Architecture Shaping (SHOULD ask):
+   - Data architecture, integration strategy
+   - Deployment model, performance requirements
+   - Multi-tenancy, eventing patterns
+
+Tier 3 - Optimization (COULD ask):
+   - Caching, search, analytics
+   - Observability, cost optimization
+
+**Step 3: Determine Question Count**
+   - Count Tier 1 + Tier 2 gaps
+   - Add Tier 3 gaps only if needed
+   - Guideline cap: ~20 questions maximum
+   - Minimum: 0 questions (if spec is perfect)
+
+Question count logic:
+   - Excellent spec (no gaps) → 0-3 questions
+   - Good spec (minor gaps) → 3-7 questions
+   - Medium spec (moderate gaps) → 7-12 questions
+   - Poor spec (many gaps) → 12-20 questions
+
+**Step 4: Generate Questions**
+   - Focus on highest impact decisions first
+   - Only ask if answer materially changes architecture
    - Skip areas where spec is already clear
    - Ensure questions are independent when possible
+   - Each question must cite evidence from spec
 
-4. **Generate Solution Options** (3-5 per question)
+**Step 5: Generate Solution Options** (3-5 per question)
    - Each option must be realistic and implementable
    - Provide specific benefits, risks, and trade-offs
    - Mark ONE as recommended based on spec context
@@ -41,81 +65,28 @@ OUTPUT FORMAT (strict JSON):
       "id": "q1",
       "question": "What is your expected system latency requirement?",
       "why_critical": "Latency requirements fundamentally affect database choice, caching strategy, infrastructure design, API architecture, and cost structure. Different latency targets lead to dramatically different architectural patterns.",
-      "context_from_spec": "You mentioned 'real-time processing' on page 2 and 'fast user experience' on page 5, but didn't specify concrete latency targets or measurements.",
+      "context_from_spec": "You mentioned real-time processing on page 2 and fast user experience on page 5, but did not specify concrete latency targets or measurements.",
       "evidence": [
-        "Page 2: 'system must support real-time processing'",
-        "Page 5: 'users expect fast, responsive interface'"
+        "Page 2: system must support real-time processing",
+        "Page 5: users expect fast and responsive interface"
       ],
       "solutions": [
         {{
           "id": "sol1",
           "title": "<100ms (Ultra-Low Latency)",
-          "description": "Aggressive sub-100ms target for all critical operations, suitable for trading platforms, gaming, or real-time collaboration tools.",
-          "benefits": [
-            "Exceptional user experience with near-instant feedback",
-            "Competitive advantage in latency-sensitive markets",
-            "Suitable for real-time trading, gaming, or collaborative tools",
-            "Meets highest user expectations"
-          ],
-          "risks": [
-            "Significantly higher infrastructure costs (3-5x typical)",
-            "Complex caching and optimization requirements",
-            "Difficult to maintain consistency across distributed systems",
-            "May over-engineer for actual business needs"
-          ],
-          "tradeoffs": [
-            "High performance vs High cost",
-            "Speed vs System complexity",
-            "User experience vs Development timeline",
-            "Real-time vs Eventual consistency"
-          ],
+          "description": "Aggressive sub-100ms target for critical operations. High cost and complexity but exceptional user experience.",
           "recommended": false
         }},
         {{
           "id": "sol2",
-          "title": "100-500ms (Balanced Performance)",
-          "description": "Standard web application performance suitable for most business applications, e-commerce, and SaaS products.",
-          "benefits": [
-            "Cost-effective infrastructure (standard cloud services)",
-            "Well-understood patterns and best practices",
-            "Good user experience for typical applications",
-            "Easier to maintain and scale",
-            "Suitable for most business requirements"
-          ],
-          "risks": [
-            "May not meet expectations if 'real-time' truly means <100ms",
-            "Could face competitive disadvantage in speed-sensitive markets",
-            "Users might perceive slight delays on slower connections"
-          ],
-          "tradeoffs": [
-            "Moderate cost vs Good performance",
-            "Standard complexity vs Proven patterns",
-            "Balanced user experience vs Pragmatic implementation",
-            "Suitable for 90% of use cases"
-          ],
+          "title": "100-500ms (Balanced)",
+          "description": "Standard web performance for most business apps. Cost-effective with proven patterns and good user experience.",
           "recommended": true
         }},
         {{
           "id": "sol3",
-          "title": "500ms-2s (Conservative)",
-          "description": "Relaxed latency target prioritizing simplicity, cost-effectiveness, and reliability over speed.",
-          "benefits": [
-            "Minimal infrastructure costs",
-            "Maximum simplicity and maintainability",
-            "Easier to achieve consistency and reliability",
-            "Suitable for internal tools or low-frequency operations"
-          ],
-          "risks": [
-            "Poor user experience for interactive applications",
-            "Not suitable for 'real-time' requirements mentioned in spec",
-            "May lead to user frustration and abandonment",
-            "Competitive disadvantage in consumer markets"
-          ],
-          "tradeoffs": [
-            "Low cost vs Slower performance",
-            "Maximum simplicity vs User experience",
-            "Only suitable for specific use cases (reporting, batch processing)"
-          ],
+          "title": "500ms-2s (Simple)",
+          "description": "Relaxed latency prioritizing simplicity and cost. Minimal cost but may not meet real-time expectations.",
           "recommended": false
         }}
       ]
@@ -126,15 +97,42 @@ OUTPUT FORMAT (strict JSON):
 
 CRITICAL REQUIREMENTS:
 
-1. Generate exactly 6 questions (no more, no less)
-2. Each question must have 3-5 solution options
-3. Each solution must have:
-   - 3-5 specific benefits
-   - 2-4 realistic risks
-   - 2-4 concrete trade-offs
-4. Exactly ONE solution per question marked as recommended
-5. Questions must be based on evidence from the spec
-6. Solutions must be genuinely different architectural choices
+1. **VALID JSON OUTPUT** (MOST IMPORTANT)
+   - Output MUST be valid, parseable JSON
+   - Escape ALL quotes inside strings (use backslash)
+   - NO line breaks inside string values
+   - NO apostrophes or use proper escaping
+   - Test your JSON mentally before outputting
+
+2. **Dynamic Question Count**
+   - Generate only the questions needed for HLD (based on gaps)
+   - Minimum: 0 questions (if spec is complete)
+   - Maximum: ~20 questions (guideline, not strict)
+   - Quality > Quantity
+
+3. **Each Question Must Have:**
+   - Clear spec evidence (cite exact quotes - escape quotes!)
+   - Precise wording (one decision per question)
+   - Why it matters (architectural impact - single line!)
+   - 3-5 solution options
+
+4. **Each Solution Format:**
+   - Title: Clear, concise option name
+   - Description: 1-2 sentences max covering benefits, risks, and trade-offs
+   - No separate benefits/risks/tradeoffs arrays - keep it simple!
+   - **Avoid overwhelming users with too much text**
+
+5. **Exactly ONE solution per question marked as recommended**
+   - Based on spec context and hints
+
+6. **Questions must be evidence-based**
+   - Every question must cite spec quotes (escape quotes!)
+   - No generic checklist questions
+   - Only ask if answer changes architecture
+
+7. **Solutions must be genuinely different architectural choices**
+   - Not just parameter variations
+   - Each represents a distinct approach
 
 FOCUS AREAS (if relevant to spec):
 

@@ -265,35 +265,6 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
                     </div>
 
                     <p className={styles.solutionDescription}>{solution.description}</p>
-
-                    <div className={styles.solutionDetails}>
-                      <div className={styles.solutionSection}>
-                        <h5>✅ Benefits</h5>
-                        <ul>
-                          {solution.benefits.map((benefit, i) => (
-                            <li key={i}>{benefit}</li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <div className={styles.solutionSection}>
-                        <h5>⚠️ Risks</h5>
-                        <ul>
-                          {solution.risks.map((risk, i) => (
-                            <li key={i}>{risk}</li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <div className={styles.solutionSection}>
-                        <h5>⚖️ Trade-offs</h5>
-                        <ul>
-                          {solution.tradeoffs.map((tradeoff, i) => (
-                            <li key={i}>{tradeoff}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
                   </div>
                 ))}
               </div>

@@ -29,13 +29,16 @@ class InterviewService:
 
     async def generate_questions(self, spec_text: str) -> list[dict[str, Any]]:
         """
-        Generate 6 critical architectural questions from specification.
+        Generate dynamic set of architectural questions from specification.
+
+        Uses AI to analyze spec gaps and generate only the questions needed
+        for HLD creation. Question count varies from 0-20 based on spec quality.
 
         Args:
             spec_text: The unified specification text
 
         Returns:
-            List of question objects with solutions
+            List of question objects with solutions (dynamic count 0-20)
         """
         prompt = self.questions_prompt_template.format(spec_text=spec_text)
 
@@ -68,7 +71,14 @@ class InterviewService:
         print(f"\n[InterviewService] Extracted JSON ({len(json_str)} chars):")
         print(f"{json_str[:500]}...")
 
-        questions_data = json.loads(json_str)
+        try:
+            questions_data = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            print(f"\n[InterviewService] ❌ JSON PARSE ERROR: {str(e)}")
+            print(f"[InterviewService] Error at line {e.lineno}, column {e.colno}")
+            print(f"\n[InterviewService] Full problematic JSON:\n{json_str}")
+            raise ValueError(f"AI generated invalid JSON: {str(e)}")
+
         questions = questions_data.get("questions", [])
 
         print(f"\n[InterviewService] Parsed {len(questions)} questions")
@@ -77,10 +87,9 @@ class InterviewService:
             if questions[0].get('solutions'):
                 print(f"[InterviewService] First solution keys: {list(questions[0]['solutions'][0].keys())}")
 
-        # Ensure exactly 6 questions
-        if len(questions) > 6:
-            questions = questions[:6]
-            print(f"[InterviewService] Trimmed to 6 questions")
+        # Dynamic question count - no hardcoded limits
+        # AI determines count based on spec gaps (0-20 guideline)
+        print(f"[InterviewService] Dynamic count: {len(questions)} questions generated")
 
         return questions
 
@@ -120,16 +129,13 @@ class InterviewService:
             if custom_input:
                 lines.append(f"  *Additional context:* {custom_input}")
 
-            # Pull benefits/risks from the matching solution object in questions.json
+            # Pull description from the matching solution object
             selected_sol = next(
                 (s for s in q.get("solutions", []) if s["id"] == answer.get("selected_solution_id")),
                 None,
             )
             if selected_sol:
-                if selected_sol.get("benefits"):
-                    lines.append(f"  Benefits: {'; '.join(selected_sol['benefits'])}")
-                if selected_sol.get("risks"):
-                    lines.append(f"  Risks: {'; '.join(selected_sol['risks'])}")
+                lines.append(f"  Rationale: {selected_sol.get('description', '')}")
 
             # Alternatives considered
             others = [s["title"] for s in q.get("solutions", []) if s["id"] != answer.get("selected_solution_id")]

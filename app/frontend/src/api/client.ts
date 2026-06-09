@@ -272,9 +272,6 @@ export interface SolutionOption {
   id: string
   title: string
   description: string
-  benefits: string[]
-  risks: string[]
-  tradeoffs: string[]
   recommended: boolean
 }
 

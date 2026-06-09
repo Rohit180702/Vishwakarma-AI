@@ -37,9 +37,6 @@ class SolutionOption(BaseModel):
     id: str
     title: str
     description: str
-    benefits: List[str]
-    risks: List[str]
-    tradeoffs: List[str]
     recommended: bool
 
 
