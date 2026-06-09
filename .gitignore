@@ -32,6 +32,9 @@ dist/
 *.sqlite
 *.sqlite3
 
+# ── Session data (runtime artifacts, not code) ────────────────────────────────
+app/backend/data/
+
 # ── OS / Editor ──────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
