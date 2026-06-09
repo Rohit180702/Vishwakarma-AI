@@ -94,9 +94,17 @@ export function DocumentPanel({ hld, onSectionEdit }: DocumentPanelProps) {
 
   return (
     <div className={styles.doc}>
+      {/* ── Document header ── */}
       <div className={styles.docHeader}>
+        <div className={styles.docBadge}>
+          <span>Architecture Document</span>
+          <span className={styles.docBadgeSep}>·</span>
+          <span className={styles.docBadgeSub}>{hld.template}</span>
+        </div>
         <h1 className={styles.docTitle}>{hld.project_name}</h1>
-        <span className={styles.docTemplate}>{hld.template}</span>
+        <p className={styles.docMeta}>
+          {hld.sections.length} sections · {hld.adrs.length} ADRs · {hld.diagrams.length} diagrams
+        </p>
       </div>
 
       {hld.sections.map(section => {
@@ -104,24 +112,28 @@ export function DocumentPanel({ hld, onSectionEdit }: DocumentPanelProps) {
         const isEditing   = editingKey === section.key
         return (
           <div key={section.key} className={`${styles.section} ${isCollapsed ? styles.sectionCollapsed : ''}`}>
-            {/* ── Accordion header ── */}
-            <button
-              className={styles.sectionHead}
-              onClick={() => toggleSection(section.key)}
-              aria-expanded={!isCollapsed}
-            >
-              <h2 className={styles.sectionTitle}>
-                <span className={styles.sectionNum}>{section.number}</span>
-                {section.title}
-              </h2>
-              {section.reviewer && !isCollapsed && (
+            {/* ── Section label (indigo line + uppercase) ── */}
+            <div className={styles.sectionLabel}>
+              {section.number} · {section.title.toUpperCase()}
+            </div>
+
+            {/* ── Section title row ── */}
+            <div className={styles.sectionTitleRow}>
+              <h2 className={styles.sectionTitle}>{section.title}</h2>
+              {section.reviewer && (
                 <span className={styles.reviewer}>Owner: {section.reviewer}</span>
               )}
-              <ChevronDown
-                size={16}
-                className={`${styles.chevron} ${isCollapsed ? styles.chevronClosed : ''}`}
-              />
-            </button>
+              <button
+                onClick={() => toggleSection(section.key)}
+                aria-expanded={!isCollapsed}
+                className={styles.sectionHead}
+              >
+                <ChevronDown
+                  size={15}
+                  className={`${styles.chevron} ${isCollapsed ? styles.chevronClosed : ''}`}
+                />
+              </button>
+            </div>
 
             {/* ── Body — hidden when collapsed ── */}
             {!isCollapsed && (

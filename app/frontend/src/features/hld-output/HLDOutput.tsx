@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { jsonrepair } from 'jsonrepair'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, FileText, GitBranch, BookMarked, Download, ShieldCheck } from 'lucide-react'
+import { ChevronLeft, FileText, GitBranch, BookMarked, Download, ShieldCheck, Check } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { AlertTriangle } from 'lucide-react'
-import { Spinner } from '@/components/Spinner'
+import { AppHeader } from '@/components/AppHeader'
 import { streamHLD, saveSession, ApiError } from '@/api/client'
-import type { HLDDocument, HLDTemplate } from '@/types'
+import type { HLDDocument, HLDTemplate, Section } from '@/types'
+import { TEMPLATE_OPTIONS } from '@/types'
 import { ChatPanel } from './ChatPanel'
 import { DocumentPanel } from './DocumentPanel'
 import { DiagramPanel } from './DiagramPanel'
@@ -15,8 +16,9 @@ import styles from './HLDOutput.module.css'
 
 interface HLDOutputProps {
   specText: string
+  sessionId?: string
   template: HLDTemplate
-  customSections?: string[]
+  customSections?: Section[]
   customTemplateText?: string
   preloadedHld?: HLDDocument | null
 }
@@ -24,7 +26,7 @@ interface HLDOutputProps {
 type Tab = 'document' | 'diagram' | 'adrs'
 type GenState = 'idle' | 'generating' | 'done' | 'error'
 
-export function HLDOutput({ specText, template, customSections, customTemplateText, preloadedHld }: HLDOutputProps) {
+export function HLDOutput({ specText, sessionId, template, customSections, customTemplateText, preloadedHld }: HLDOutputProps) {
   const [genState, setGenState] = useState<GenState>(preloadedHld ? 'done' : 'idle')
   const [rawTokens, setRawTokens] = useState('')
   const [hld, setHld] = useState<HLDDocument | null>(preloadedHld ?? null)
@@ -55,7 +57,7 @@ export function HLDOutput({ specText, template, customSections, customTemplateTe
             const doc: HLDDocument = JSON.parse(jsonToParse)
             setHld(doc)
             setGenState('done')
-            saveSession(doc.project_name, template, specText, jsonToParse).catch(
+            saveSession(doc.project_name, template, specText, jsonToParse, sessionId).catch(
               (e) => console.warn('Session save failed (non-critical):', e)
             )
           } catch (e) {
@@ -66,7 +68,8 @@ export function HLDOutput({ specText, template, customSections, customTemplateTe
           }
         },
         abortRef.current.signal,
-        customSections,
+        // Send only section names to the backend; hints are UI-only for now
+        customSections?.map(s => s.name),
         customTemplateText,
       )
     } catch (err) {
@@ -91,23 +94,12 @@ export function HLDOutput({ specText, template, customSections, customTemplateTe
 
   if (genState === 'generating') {
     return (
-      <div className={styles.generatingPage}>
-        <Spinner size="lg" />
-        <h2 className={styles.genTitle}>Generating your HLD…</h2>
-        <p className={styles.genSub}>
-          Claude is writing sections, ADRs, and C4 diagrams based on your specification.
-        </p>
-        {rawTokens && (
-          <pre className={styles.tokenStream}>{rawTokens.slice(-400)}</pre>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => { abortRef.current?.abort(); navigate('/format') }}
-        >
-          Cancel
-        </Button>
-      </div>
+      <GeneratingPanel
+        template={template}
+        customSections={customSections}
+        rawTokens={rawTokens}
+        onCancel={() => { abortRef.current?.abort(); navigate('/format') }}
+      />
     )
   }
 
@@ -137,42 +129,25 @@ export function HLDOutput({ specText, template, customSections, customTemplateTe
       {/* Main — tabs + content */}
       <div className={styles.mainCol}>
         <header className={styles.mainHeader}>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/format')}
-            icon={<ChevronLeft size={14} />}
-          >
-            Back
-          </Button>
-          <nav className={styles.tabs} role="tablist" aria-label="HLD view">
-            <TabButton
-              id="tab-document"
-              active={activeTab === 'document'}
-              icon={<FileText size={14} />}
-              label="Document"
-              onClick={() => setActiveTab('document')}
-            />
-            <TabButton
-              id="tab-diagram"
-              active={activeTab === 'diagram'}
-              icon={<GitBranch size={14} />}
-              label="Architecture Diagram"
-              onClick={() => setActiveTab('diagram')}
-            />
-            <TabButton
-              id="tab-adrs"
-              active={activeTab === 'adrs'}
-              icon={<BookMarked size={14} />}
-              label={`ADRs${hld ? ` (${hld.adrs.length})` : ''}`}
-              onClick={() => setActiveTab('adrs')}
-            />
+          {/* Left: breadcrumb back */}
+          <button className={styles.backBtn} onClick={() => navigate('/format')}>
+            <ChevronLeft size={14} /> <span className={styles.backLabel}>Vishwakarma</span>
+            <span className={styles.backSep}>/</span>
+            <span className={styles.backCurrent}>{hld.project_name}</span>
+          </button>
+
+          {/* Center: pill tab group */}
+          <nav className={styles.tabGroup} role="tablist" aria-label="HLD view">
+            <TabButton id="tab-document" active={activeTab === 'document'} icon={<FileText size={13} />} label="Document" onClick={() => setActiveTab('document')} />
+            <TabButton id="tab-diagram" active={activeTab === 'diagram'} icon={<GitBranch size={13} />} label="Diagram" onClick={() => setActiveTab('diagram')} />
+            <TabButton id="tab-adrs" active={activeTab === 'adrs'} icon={<BookMarked size={13} />} label={`ADRs${hld ? ` (${hld.adrs.length})` : ''}`} onClick={() => setActiveTab('adrs')} />
           </nav>
+
+          {/* Right: quality badge + export */}
           <span className={styles.headerRight}>
-            <span className={styles.projectBadge}>{hld.project_name}</span>
             <QualityBadge adrsCount={hld.adrs.length} sectionsCount={hld.sections.length} />
             <button className={styles.exportBtn} title="Export (coming soon)" disabled>
-              <Download size={14} /> Export
+              <Download size={13} /> Export
             </button>
           </span>
         </header>
@@ -231,6 +206,163 @@ function QualityBadge({ adrsCount, sectionsCount }: { adrsCount: number; section
       <ShieldCheck size={12} style={{ color }} />
       {score}%
     </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Helpers — extract live section data from the raw SSE token stream
+// ---------------------------------------------------------------------------
+
+function extractLiveData(raw: string): {
+  projectName: string
+  completedTitles: string[]
+  activeTitle: string
+  activeContent: string
+} {
+  // All "title" values seen so far
+  const allTitles = [...raw.matchAll(/"title":\s*"([^"\\]+)"/g)].map(m => m[1])
+
+  // Project name (appears early in the stream)
+  const projectName = raw.match(/"project_name":\s*"([^"\\]+)"/)?.[1] ?? ''
+
+  // Find the last open "content": " to get the text being typed right now
+  const contentIdx = raw.lastIndexOf('"content": "')
+  let activeContent = ''
+  if (contentIdx !== -1) {
+    const raw2 = raw.slice(contentIdx + 12)
+    activeContent = raw2
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\')
+      .replace(/\\r/g, '')
+      // trim any trailing partial escape sequence
+      .replace(/\\[ntr"\\]?$/, '')
+  }
+
+  // The active (currently writing) section is the last title seen
+  const activeTitle = allTitles[allTitles.length - 1] ?? ''
+  // Completed sections are all titles before the active one
+  const completedTitles = allTitles.slice(0, -1)
+
+  return { projectName, completedTitles, activeTitle, activeContent }
+}
+
+// ---------------------------------------------------------------------------
+// GeneratingPanel
+// ---------------------------------------------------------------------------
+
+function GeneratingPanel({
+  template,
+  customSections,
+  rawTokens,
+  onCancel,
+}: {
+  template: HLDTemplate
+  customSections?: Section[]
+  rawTokens: string
+  onCancel: () => void
+}) {
+  const templateOpt = TEMPLATE_OPTIONS.find(t => t.id === template)
+  const sections = customSections?.map(s => s.name) ?? templateOpt?.default_sections ?? [
+    'Overview', 'Architecture', 'ADRs', 'Diagrams', 'Risks',
+  ]
+
+  const { projectName, completedTitles, activeTitle, activeContent } = extractLiveData(rawTokens)
+
+  // Accurate section progress from the parsed stream
+  const doneCount  = completedTitles.length
+  const activeIdx  = Math.min(doneCount, sections.length - 1)
+  const pct        = sections.length > 0
+    ? Math.min(Math.round((doneCount / sections.length) * 100), 95)
+    : 0
+
+  return (
+    <div className={styles.genLayout}>
+      <AppHeader />
+
+      <div className={styles.genBody}>
+        {/* Left: section checklist */}
+        <div className={styles.genLeft}>
+          <p className={styles.genEyebrow}>Generating</p>
+          <h2 className={styles.genTitle}>Building your HLD…</h2>
+          <p className={styles.genSub}>
+            {projectName ? `"${projectName}"` : 'Claude is writing sections, ADRs, and C4 diagrams.'}
+          </p>
+
+          <div className={styles.genProgressWrap}>
+            <div className={styles.genProgressLabel}>
+              <span>Progress</span>
+              <span className={styles.genProgressPct}>{pct}%</span>
+            </div>
+            <div className={styles.genProgressTrack}>
+              <div className={styles.genProgressFill} style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+
+          <div className={styles.genSectionList}>
+            {sections.map((sec, i) => {
+              const done   = i < doneCount
+              const active = i === activeIdx && rawTokens.length > 0
+              return (
+                <div key={i} className={styles.genSec}>
+                  <span className={`${styles.genSecIcon} ${done ? styles.genSecDone : active ? styles.genSecActive : styles.genSecPending}`}>
+                    {done && <Check size={10} strokeWidth={3} />}
+                  </span>
+                  <span className={`${styles.genSecName} ${!done && !active ? styles.genSecMuted : ''}`}>{sec}</span>
+                  <span className={styles.genSecNum}>{String(i + 1).padStart(2, '0')}</span>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className={styles.genCancelWrap}>
+            <Button variant="ghost" size="sm" onClick={onCancel}>Cancel generation</Button>
+          </div>
+        </div>
+
+        {/* Right: live human-readable section preview */}
+        <div className={styles.genRight}>
+          <div className={styles.genRightHeader}>
+            <span className={styles.genRightDot} />
+            <span className={styles.genRightLabel}>Writing now</span>
+            {activeTitle && (
+              <span className={styles.genRightCurrent}>{activeTitle}</span>
+            )}
+          </div>
+
+          <div className={styles.genLiveBody}>
+            {/* Completed sections — compact chips */}
+            {completedTitles.length > 0 && (
+              <div className={styles.genDoneList}>
+                {completedTitles.map((t, i) => (
+                  <span key={i} className={styles.genDoneChip}>
+                    <Check size={10} strokeWidth={3} />
+                    {t}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Active section being written */}
+            {activeTitle ? (
+              <div className={styles.genActiveSection}>
+                <p className={styles.genActiveSectionTitle}>{activeTitle}</p>
+                <div className={styles.genActiveContent}>
+                  {activeContent || <span className={styles.genWaiting}>Starting…</span>}
+                  <span className={styles.genCursor} aria-hidden="true" />
+                </div>
+              </div>
+            ) : (
+              <div className={styles.genWaitingWrap}>
+                <span className={styles.genRightDot} style={{ width: 10, height: 10 }} />
+                <span className={styles.genWaiting}>Waiting for Claude…</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

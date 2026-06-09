@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { UploadCloud, FileText, AlertCircle, Image, FilePlus2, Clock, Trash2, ArrowRight, X } from 'lucide-react'
+import { UploadCloud, FileText, AlertCircle, Clock, Trash2, ArrowRight, X, Lock } from 'lucide-react'
 import { FlowStepper } from '@/components/FlowStepper/FlowStepper'
+import { AppHeader } from '@/components/AppHeader'
 import { listSessions, loadSession, deleteSession, uploadSpecFiles } from '@/api/client'
-import type { SessionSummary, UploadedDocumentInfo } from '@/api/client'
+import type { SessionSummary, SessionDetail } from '@/api/client'
 import type { HLDDocument, HLDTemplate } from '@/types'
+import { SessionPreviewDrawer, sessionResumeStage } from './SessionPreviewDrawer'
 import styles from './SpecUpload.module.css'
 
 interface SpecUploadProps {
   onReady: (specText: string, sessionId?: string) => void
-  onLoadSession: (spec: string, template: HLDTemplate, hld: HLDDocument) => void
+  onLoadSession: (spec: string, template: HLDTemplate, hld: HLDDocument, sessionId?: string) => void
 }
 
 type UploadState = 'idle' | 'dragging' | 'reading' | 'uploading' | 'error'
@@ -24,20 +26,43 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
   const [errorMsg, setErrorMsg] = useState('')
   const [selectedFiles, setSelectedFiles] = useState<FileWithPreview[]>([])
   const [sessions, setSessions] = useState<SessionSummary[]>([])
+  const [drawerDetail, setDrawerDetail] = useState<SessionDetail | null>(null)
+  const [drawerLoading, setDrawerLoading] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
     listSessions().then(setSessions).catch(() => {})
   }, [])
 
-  const handleLoadSession = async (id: string) => {
+  const handleSessionClick = async (id: string) => {
+    setDrawerDetail(null)
+    setDrawerLoading(true)
     try {
       const detail = await loadSession(id)
-      const hld: HLDDocument = JSON.parse(detail.hld_json)
-      onLoadSession(detail.spec_text, detail.template as HLDTemplate, hld)
-      navigate('/generate')
+      setDrawerDetail(detail)
     } catch (e) {
       console.error('Failed to load session', e)
+      setDrawerLoading(false)
+    } finally {
+      setDrawerLoading(false)
+    }
+  }
+
+  const handleResume = () => {
+    if (!drawerDetail) return
+    const dest = sessionResumeStage(drawerDetail)
+    setDrawerDetail(null)
+
+    if (dest === 'generate') {
+      try {
+        const hld: HLDDocument = JSON.parse(drawerDetail.hld_json)
+        onLoadSession(drawerDetail.spec_text, drawerDetail.template as HLDTemplate, hld, drawerDetail.id)
+        navigate('/generate')
+      } catch { console.error('Failed to parse HLD') }
+    } else {
+      // Set spec + sessionId so interview / format routes are accessible
+      onReady(drawerDetail.spec_text, drawerDetail.id)
+      navigate(dest === 'format' ? '/format' : '/interview')
     }
   }
 
@@ -45,6 +70,7 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
     e.stopPropagation()
     await deleteSession(id)
     setSessions((prev: SessionSummary[]) => prev.filter((s: SessionSummary) => s.id !== id))
+    if (drawerDetail?.id === id) setDrawerDetail(null)
   }
 
   const addFiles = useCallback((files: FileList | null) => {
@@ -106,13 +132,7 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
 
   return (
     <div className={styles.page}>
-      {/* Header */}
-      <header className={styles.header}>
-        <div className={styles.logo}>
-          <span className={styles.logoGlyph}>⚙</span>
-          <span className={styles.logoText}>Vishwakarma AI</span>
-        </div>
-      </header>
+      <AppHeader />
       <FlowStepper current={0} />
 
       <main className={styles.main}>
@@ -145,16 +165,9 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
               onDragLeave={() => setState('idle')}
               onDrop={onDrop}
             >
-              <UploadCloud size={44} strokeWidth={1.3} className={styles.uploadIcon} />
+              <UploadCloud size={48} strokeWidth={1.25} className={styles.uploadIcon} />
               <p className={styles.dropLabel}>Drag &amp; drop your specification files</p>
-              <p className={styles.dropSub}>
-                Multiple files supported: .txt · .md · .docx · .pdf
-              </p>
-              <div className={styles.formatPills}>
-                <span className={styles.pill}><FileText size={11} /> Markdown</span>
-                <span className={styles.pill}><FilePlus2 size={11} /> Word / PDF</span>
-                <span className={styles.pill}><Image size={11} /> Image (coming soon)</span>
-              </div>
+              <p className={styles.dropSub}>PDF · DOCX · MD · TXT</p>
               <span className={styles.browseBtn}>Browse files</span>
               <input
                 id="spec-file"
@@ -168,9 +181,14 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
           )}
         </div>
 
+        <div className={styles.privacyRow}>
+          <Lock size={12} />
+          <span>No account needed · spec stays in your session</span>
+        </div>
+
         {/* Selected files list */}
         {selectedFiles.length > 0 && (
-          <div className={styles.sessions} style={{ marginTop: '24px' }}>
+          <div className={styles.sessions}>
             <div className={styles.sessionsHeader}>
               <FileText size={13} />
               <span>Selected Files ({selectedFiles.length})</span>
@@ -187,10 +205,7 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
                   </span>
                   <button
                     className={styles.sessionDelete}
-                    onClick={(e: React.MouseEvent) => {
-                      e.stopPropagation()
-                      removeFile(fileItem.id)
-                    }}
+                    onClick={(e: React.MouseEvent) => { e.stopPropagation(); removeFile(fileItem.id) }}
                     title="Remove file"
                   >
                     <X size={12} />
@@ -198,29 +213,11 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
                 </div>
               ))}
             </div>
-            <button
-              onClick={handleUpload}
-              disabled={state === 'uploading'}
-              style={{
-                width: '100%',
-                marginTop: '16px',
-                padding: '12px 24px',
-                backgroundColor: 'var(--accent)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: 600,
-                cursor: state === 'uploading' ? 'not-allowed' : 'pointer',
-                opacity: state === 'uploading' ? 0.6 : 1,
-              }}
-            >
-              {state === 'uploading' ? 'Uploading...' : 'Upload and Continue'}
+            <button className={styles.uploadBtn} onClick={handleUpload} disabled={state === 'uploading'}>
+              {state === 'uploading' ? 'Uploading…' : `Upload ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} →`}
             </button>
           </div>
         )}
-
-        <p className={styles.hint}>No account needed · spec stays in your session</p>
 
         {sessions.length > 0 && (
           <div className={styles.sessions}>
@@ -232,14 +229,16 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
               {sessions.map(s => (
                 <button
                   key={s.id}
-                  className={styles.sessionItem}
-                  onClick={() => handleLoadSession(s.id)}
-                  title="Reopen this HLD"
+                  className={`${styles.sessionItem} ${drawerDetail?.id === s.id ? styles.sessionItemActive : ''}`}
+                  onClick={() => handleSessionClick(s.id)}
+                  title="Preview this session"
                 >
                   <FileText size={14} className={styles.sessionFileIcon} />
                   <span className={styles.sessionName}>{s.project_name}</span>
                   <span className={styles.sessionMeta}>
-                    <span className={styles.sessionTemplate}>{s.template}</span>
+                    <span className={`${styles.stageBadge} ${styles[`stageBadge_${s.stage}`]}`}>
+                      {s.stage === 'generate' ? 'HLD ready' : s.stage === 'format' ? 'Pick template' : 'Interview'}
+                    </span>
                     <span className={styles.sessionDate}>
                       {new Date(s.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </span>
@@ -258,6 +257,13 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
           </div>
         )}
       </main>
+
+      <SessionPreviewDrawer
+        detail={drawerDetail}
+        loading={drawerLoading}
+        onClose={() => { setDrawerDetail(null); setDrawerLoading(false) }}
+        onResume={handleResume}
+      />
     </div>
   )
 }

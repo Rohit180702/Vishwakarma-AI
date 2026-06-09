@@ -77,8 +77,17 @@ export function ChatPanel({ hld }: ChatPanelProps) {
 
   return (
     <div className={styles.panel}>
+      {/* Project context box — matches design's ctx-aside */}
+      <div className={styles.ctxBox}>
+        <p className={styles.ctxLabel}>Project Context</p>
+        <div className={styles.ctxProject}>
+          <p className={styles.ctxProjectLabel}>Architecture Document</p>
+          <p className={styles.ctxProjectName}>{hld.project_name}</p>
+        </div>
+      </div>
+
       <div className={styles.header}>
-        <Bot size={16} className={styles.headerIcon} />
+        <Bot size={15} className={styles.headerIcon} />
         <span className={styles.headerTitle}>Architecture Sidekick</span>
       </div>
 

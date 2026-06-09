@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Download } from 'lucide-react'
 import type { ADR, HLDDocument } from '@/types'
 import styles from './ADRPanel.module.css'
@@ -95,22 +94,23 @@ export function ADRPanel({ hld }: ADRPanelProps) {
 
   return (
     <div className={styles.panel}>
-      <div className={styles.panelHeader}>
-        <div className={styles.panelMeta}>
-          <h2 className={styles.panelTitle}>Architecture Decision Records</h2>
-          <span className={styles.adrCount}>{adrs.length} decisions</span>
-        </div>
+      {/* Header */}
+      <div className={styles.panelHeaderMeta}>
+        <span className={styles.collectionTag}>ADR Collection</span>
+        <span className={styles.collectionCount}>{adrs.length} decisions</span>
+      </div>
+      <div className={styles.panelTitleRow}>
+        <h2 className={styles.panelTitle}>Architecture Decision Records</h2>
         <button className={styles.downloadBtn} onClick={downloadMarkdown} title="Download all ADRs as Markdown">
-          <Download size={14} />
-          Download .md
+          <Download size={14} /> Download .md
         </button>
       </div>
-
-      <p className={styles.panelHint}>
-        These should be stored as individual files in <code>/docs/adr/</code> in your repository — one file per ADR, immutable once accepted.
+      <p className={styles.panelSub}>
+        Each decision is immutable once accepted. Store as individual files in <code>/docs/adr/</code> in your repository.
       </p>
 
-      <div className={styles.adrList}>
+      {/* 2-column card grid */}
+      <div className={styles.adrGrid}>
         {adrs.map(adr => (
           <ADRCard key={adr.id} adr={adr} />
         ))}
@@ -120,87 +120,67 @@ export function ADRPanel({ hld }: ADRPanelProps) {
 }
 
 function ADRCard({ adr }: { adr: ADR }) {
-  const [open, setOpen] = useState(false)
-
-  const statusColor: Record<string, string> = {
-    Accepted: 'var(--color-success)',
-    Proposed: 'var(--color-warning)',
-    Superseded: 'var(--color-text-muted)',
+  const statusClass: Record<string, string> = {
+    Accepted:   styles.adrBadgeAccepted,
+    Proposed:   styles.adrBadgeProposed,
+    Superseded: styles.adrBadgeSuperseded,
   }
+
+  const posConsequences = adr.consequences_positive ?? []
+  const negConsequences = adr.consequences_negative ?? []
 
   return (
     <div className={styles.adrCard}>
-      <button
-        className={styles.adrHeader}
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-      >
-        <span className={styles.adrId}>{adr.id}</span>
-        <span className={styles.adrTitle}>{adr.title}</span>
-        <span className={styles.adrStatus} style={{ color: statusColor[adr.status] ?? 'inherit' }}>
-          {adr.status}
-        </span>
-        <span className={styles.costBand}>{adr.cost_band}</span>
-        <span className={styles.adrToggle}>{open ? '▲' : '▼'}</span>
-      </button>
+      {/* Top: id tag + status badge */}
+      <div className={styles.adrTop}>
+        <span className={styles.adrIdTag}>{adr.id}</span>
+        <span className={`${styles.adrBadge} ${statusClass[adr.status] ?? ''}`}>{adr.status}</span>
+      </div>
 
-      {open && (
-        <div className={styles.adrBody}>
-          <div className={styles.adrSection}>
-            <span className={styles.adrLabel}>Context</span>
-            <p className={styles.adrText}>{adr.context}</p>
-          </div>
+      {/* Title */}
+      <h3 className={styles.adrItemTitle}>{adr.title}</h3>
 
-          <div className={styles.adrSection}>
-            <span className={styles.adrLabel}>Decision</span>
-            <p className={`${styles.adrText} ${styles.decision}`}>{adr.decision}</p>
-          </div>
-
-          {adr.alternatives?.length > 0 && (
-            <div className={styles.adrSection}>
-              <span className={styles.adrLabel}>Alternatives Considered</span>
-              <div className={styles.altGrid}>
-                {adr.alternatives.map((alt, i) => (
-                  <div key={i} className={styles.altCard}>
-                    <span className={styles.altName}>{alt.option}</span>
-                    {alt.pros?.length > 0 && (
-                      <ul className={styles.prosList}>
-                        {alt.pros.map((p, j) => <li key={j}>{p}</li>)}
-                      </ul>
-                    )}
-                    {alt.cons?.length > 0 && (
-                      <ul className={styles.consList}>
-                        {alt.cons.map((c, j) => <li key={j}>{c}</li>)}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {(adr.consequences_positive?.length > 0 || adr.consequences_negative?.length > 0) && (
-            <div className={styles.consequencesRow}>
-              {adr.consequences_positive?.length > 0 && (
-                <div className={styles.adrSection}>
-                  <span className={styles.adrLabel}>Benefits</span>
-                  <ul className={styles.prosList}>
-                    {adr.consequences_positive.map((c, i) => <li key={i}>{c}</li>)}
-                  </ul>
-                </div>
-              )}
-              {adr.consequences_negative?.length > 0 && (
-                <div className={styles.adrSection}>
-                  <span className={styles.adrLabel}>Trade-offs</span>
-                  <ul className={styles.consList}>
-                    {adr.consequences_negative.map((c, i) => <li key={i}>{c}</li>)}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
+      {/* Body sections */}
+      <div className={styles.adrSections}>
+        <div>
+          <p className={styles.adrFieldLabel}>Context</p>
+          <p className={styles.adrFieldText}>{adr.context}</p>
         </div>
-      )}
+
+        <div>
+          <p className={styles.adrFieldLabel}>Decision</p>
+          <p className={styles.adrDecisionText}>{adr.decision}</p>
+        </div>
+
+        {(posConsequences.length > 0 || negConsequences.length > 0) && (
+          <div className={styles.pcGrid}>
+            {posConsequences.length > 0 && (
+              <div className={styles.pcBox}>
+                <p className={styles.pcLabelPos}>Benefits</p>
+                <ul className={styles.pcList}>
+                  {posConsequences.map((c, i) => <li key={i}>{c}</li>)}
+                </ul>
+              </div>
+            )}
+            {negConsequences.length > 0 && (
+              <div className={styles.pcBox}>
+                <p className={styles.pcLabelNeg}>Trade-offs</p>
+                <ul className={styles.pcList}>
+                  {negConsequences.map((c, i) => <li key={i}>{c}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Footer: cost band */}
+      <div className={styles.adrCardFooter}>
+        <div className={styles.costWrap}>
+          <span className={styles.costLabel}>Cost</span>
+          <span className={styles.costBand}>{adr.cost_band}</span>
+        </div>
+      </div>
     </div>
   )
 }

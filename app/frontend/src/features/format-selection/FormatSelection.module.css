@@ -1,212 +1,324 @@
-.page { min-height: 100dvh; display: flex; flex-direction: column; }
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-8);
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0;
-}
-
-.logo { display: flex; align-items: center; gap: var(--space-2); }
-.logoIcon { font-size: 20px; }
-.logoText { font-size: 16px; font-weight: 700; color: var(--color-primary); }
-
-.steps { display: flex; align-items: center; gap: var(--space-2); }
-
-.step { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--color-text-muted); }
-.stepNum {
-  width: 22px; height: 22px;
-  display: flex; align-items: center; justify-content: center;
-  border-radius: 50%;
-  font-size: 12px; font-weight: 600;
-  background: var(--color-border);
-  color: var(--color-text-muted);
-}
-.stepDone .stepNum { background: var(--color-success-light); color: var(--color-success); }
-.stepActive .stepLabel { color: var(--color-text); font-weight: 600; }
-.stepActive .stepNum { background: var(--color-primary); color: #fff; }
-
-.main {
-  flex: 1;
-  max-width: 920px;
-  margin: 0 auto;
-  padding: var(--space-10) var(--space-6);
-  width: 100%;
+/* ── Page shell ── */
+.page {
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  background: var(--color-surface-2);
 }
 
-.heading { }
-.title { font-size: 26px; font-weight: 700; letter-spacing: -0.3px; }
-.subtitle { margin-top: var(--space-2); font-size: 15px; color: var(--color-text-secondary); max-width: 620px; }
+/* ── Body: flex row so right panel slides in ── */
+.body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
 
-/* ---- Template grid ---- */
+/* ── Left panel ── */
+.left {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 56px 48px;
+  transition: justify-content 0s 0.25s;
+}
+
+.bodyPanelOpen .left {
+  justify-content: center;
+  padding-right: 32px;
+  transition: none;
+}
+
+.leftContent {
+  width: 100%;
+  max-width: 980px;
+  /* no size change on panel open — cards stay exactly the same size */
+}
+
+/* .leftContentShifted intentionally does NOT change max-width */
+.leftContentShifted {
+  max-width: 980px;
+}
+
+/* ── Heading ── */
+.eyebrow {
+  font-size: 13px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.2em; color: var(--color-primary); margin-bottom: 12px;
+}
+.headline {
+  font-size: 34px; font-weight: 800; letter-spacing: -0.03em;
+  line-height: 1.15; margin-bottom: 8px; color: var(--color-text);
+}
+.sub {
+  font-size: 16px; color: var(--color-text-secondary); margin-bottom: 36px;
+}
+
+/* ── 2 × 2 card grid ── */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: var(--space-4);
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
 }
 
-.templateCard {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding-bottom: var(--space-3);
+/* ── Screen-reader only utility ── */
+.srOnly {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
 }
 
-.checkBadge {
-  position: absolute;
-  top: var(--space-3);
-  right: var(--space-3);
-  color: var(--color-primary);
-  line-height: 0;
-}
-
-.cardHeader { display: flex; align-items: baseline; gap: var(--space-3); }
-.templateName { font-size: 16px; font-weight: 700; }
-.standard { font-size: 12px; color: var(--color-text-muted); }
-
-.description { font-size: 14px; color: var(--color-text-secondary); line-height: 1.5; }
-
-.cardMeta { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-top: auto; }
-.sectionCount { font-size: 12px; font-weight: 600; color: var(--color-text-muted); padding: 2px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-full); }
-.tags { display: flex; flex-wrap: wrap; gap: 4px; }
-.tag { padding: 2px 8px; background: var(--color-surface-2); border-radius: var(--radius-full); font-size: 11px; color: var(--color-text-secondary); }
-
-.customizeBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: var(--space-2);
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-primary);
-  background: var(--color-primary-light);
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: opacity var(--transition-fast);
-  align-self: flex-start;
-}
-.customizeBtn:hover { opacity: 0.8; }
-
-/* ---- Custom "Define your own" card ---- */
-.customCard {
-  min-height: 160px;
-  justify-content: center;
-  border-style: dashed !important;
-}
-.customCardBody {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  text-align: center;
-  padding: var(--space-4);
-}
-.customIcon { color: var(--color-primary); opacity: 0.7; }
-.customLabel { font-size: 15px; font-weight: 700; }
-.customSub { font-size: 13px; color: var(--color-text-secondary); max-width: 220px; }
-
-/* ---- Section editor ---- */
-.editor {
+/* ── Card ── */
+.card {
   background: var(--color-surface);
-  border: 1.5px solid var(--color-primary);
-  border-radius: var(--radius-md);
-  padding: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
+  border: 1.5px solid var(--color-border);
+  border-radius: 18px;
+  padding: 28px;
+  cursor: pointer;
+  text-align: left;
+  display: flex; flex-direction: column; gap: 18px;
+  transition: border-color .18s, box-shadow .18s, transform .14s;
+  /* Do NOT suppress outline without a replacement — :focus-visible below provides it */
+  font-family: inherit;
+  position: relative;
+  overflow: hidden;
 }
 
-.editorHeader {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: 14px;
-  font-weight: 600;
+/* Left accent bar — single primary colour for all templates */
+.card::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--color-primary);
+  opacity: 0;
+  transition: opacity .18s;
+  border-radius: 18px 0 0 18px;
+}
+.card:hover::before { opacity: 0.35; }
+.cardPicked::before { opacity: 1 !important; }
+
+.card:hover {
+  border-color: var(--color-primary-muted);
+  box-shadow: 0 4px 16px rgba(99, 93, 255, 0.08);
+  transform: translateY(-2px);
+}
+.card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-primary-subtle);
+}
+.cardPicked {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px var(--color-primary-subtle), 0 4px 16px rgba(99, 93, 255, 0.1);
+  background: var(--color-primary-light);
+  transform: translateY(-2px);
+}
+
+.customCard { border-style: dashed; }
+.customCard:hover, .cardPicked.customCard { border-style: solid; }
+
+/* ── Card internals ── */
+.cardTop { display: flex; align-items: flex-start; gap: 16px; }
+
+/* Document icon badge — same for every template */
+.cardBadge {
+  width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--color-surface-2); border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  transition: background .15s, color .15s, border-color .15s;
+}
+.card:hover .cardBadge {
+  background: var(--color-primary-light);
+  border-color: var(--color-primary-subtle);
   color: var(--color-primary);
 }
-.editorHint {
-  margin-inline-start: auto;
-  font-size: 12px;
-  font-weight: 400;
+.cardPicked .cardBadge {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
+.cardCheck { color: var(--color-primary); flex-shrink: 0; margin-top: 3px; }
+
+.cardMeta { flex: 1; min-width: 0; padding-top: 2px; }
+.cardStd {
+  display: block; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--color-text-muted); margin-bottom: 5px;
+}
+.cardPicked .cardStd { color: var(--color-primary); }
+.cardName {
+  display: block; font-size: 21px; font-weight: 800; letter-spacing: -0.025em;
+  color: var(--color-text); line-height: 1.1;
+}
+.cardPicked .cardName { color: var(--color-primary); }
+
+.cardDesc {
+  font-size: 14px; color: var(--color-text-secondary); line-height: 1.65; margin: 0;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+.cardFooter {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+}
+.cardPills { display: flex; gap: 5px; flex-wrap: wrap; }
+.tPill {
+  font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px;
+  background: var(--color-surface-2); border: 1px solid var(--color-border);
   color: var(--color-text-muted);
 }
+.cardPicked .tPill {
+  background: var(--color-surface);
+  border-color: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+.tCount {
+  font-size: 11px; font-weight: 700; color: var(--color-text-muted);
+  text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; flex-shrink: 0;
+}
+.cardPicked .tCount { color: var(--color-primary); }
 
+/* ── Right slide-in panel ── */
+.right {
+  flex-shrink: 0;
+  width: 420px;
+  margin-right: -420px;        /* hidden off-screen to the right */
+  border-left: 1px solid var(--color-border);
+  background: var(--color-surface);
+  overflow-y: auto;
+  padding: 28px 22px;
+  display: flex; flex-direction: column; gap: 14px;
+  transition: margin-right 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.rightOpen {
+  margin-right: 0;             /* slides into view */
+}
+
+/* ── Panel header ── */
+.panelHeader {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+}
+.panelLabel {
+  font-size: 14px; font-weight: 800; color: var(--color-text); letter-spacing: -0.02em;
+}
+.panelHint {
+  font-size: 11px; color: var(--color-text-muted); margin-top: 3px;
+  text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+}
+
+.closeBtn {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 6px; flex-shrink: 0;
+  border: 1px solid var(--color-border); background: var(--color-surface-2);
+  color: var(--color-text-muted); cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.closeBtn:hover { background: var(--color-danger-light); color: var(--color-danger); border-color: transparent; }
+
+/* ── Section list (editor) ── */
 .sectionList {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  list-style: none; display: flex; flex-direction: column; gap: 5px;
+  /* no flex:1 — let it be its natural height so there's no dead space below */
 }
 .sectionItem {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 8px 12px;
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: grab;
-  user-select: none;
+  background: var(--color-surface-2); border: 1px solid var(--color-border);
+  border-radius: 8px; overflow: hidden;
+  transition: border-color .1s, background .1s;
 }
-.sectionItem:active { cursor: grabbing; }
+.sectionItem:hover { border-color: var(--color-primary-muted); }
+.sectionRow {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  cursor: grab; user-select: none;
+}
+.sectionRow:active { cursor: grabbing; }
 .grip { color: var(--color-text-muted); flex-shrink: 0; }
 .sectionNum {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  font-size: 11px;
-  font-weight: 700;
-  background: var(--color-primary-light);
-  color: var(--color-primary);
+  width: 18px; height: 18px; display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; font-size: 10px; font-weight: 700;
+  background: var(--color-primary-light); color: var(--color-primary); flex-shrink: 0;
+}
+.sectionName { flex: 1; font-size: 12px; font-weight: 500; }
+
+/* Hint toggle button */
+.hintToggle {
+  display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 4px; border: none;
+  background: transparent; cursor: pointer; color: var(--color-text-muted);
+  transition: background .15s, color .15s;
+}
+.hintToggle:hover { background: var(--color-primary-light); color: var(--color-primary); }
+.hintToggleOpen { color: var(--color-primary); background: var(--color-primary-light); }
+
+/* Hint textarea area */
+.hintArea {
+  padding: 0 10px 10px 36px; display: flex; flex-direction: column; gap: 4px;
+}
+.hintLabel {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--color-primary);
+}
+.hintTextarea {
+  resize: none; width: 100%; box-sizing: border-box;
+  padding: 6px 10px; border: 1px solid var(--color-primary-subtle);
+  border-radius: 6px; background: var(--color-surface);
+  font-size: 11px; font-family: var(--font-ui); color: var(--color-text);
+  line-height: 1.5; transition: border-color .15s;
+}
+.hintTextarea:focus { outline: none; border-color: var(--color-primary); }
+.hintTextarea::placeholder { color: var(--color-text-muted); }
+
+/* Action group: up/down/remove */
+.sectionActions {
+  display: flex; align-items: center; gap: 2px; flex-shrink: 0;
+}
+.moveBtn {
+  display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border: none; background: none; cursor: pointer;
+  color: var(--color-text-muted); border-radius: 4px; font-size: 11px;
+  transition: background .15s, color .15s;
+}
+.moveBtn:hover:not(:disabled) { background: var(--color-surface); color: var(--color-primary); }
+.moveBtn:disabled { opacity: 0.25; cursor: default; }
+.removeBtn {
+  display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border: none; background: none; cursor: pointer;
+  color: var(--color-text-muted); border-radius: 4px; margin-left: 2px;
+  transition: background .15s, color .15s;
+}
+.removeBtn:hover { background: var(--color-danger-light); color: var(--color-danger); }
+
+.addRow { display: flex; gap: 7px; align-items: center; }
+.addInput {
+  flex: 1; padding: 7px 10px;
+  border: 1.5px solid var(--color-border); border-radius: 7px;
+  font-size: 13px; font-family: var(--font-ui);
+  background: var(--color-surface-2); color: var(--color-text);
+  transition: border-color .15s;
+}
+.addInput:focus { outline: none; border-color: var(--color-primary); background: var(--color-surface); }
+.emptyHint { font-size: 12px; color: var(--color-danger); text-align: center; }
+
+/* ── Sticky bottom nav ── */
+.nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 32px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  position: sticky; bottom: 0;
   flex-shrink: 0;
 }
-.sectionName { flex: 1; font-size: 14px; }
-.removeBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  color: var(--color-text-muted);
-  border-radius: 50%;
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-.removeBtn:hover { background: var(--color-danger-light, #fee2e2); color: var(--color-danger); }
 
-.addRow {
-  display: flex;
-  gap: var(--space-3);
-  align-items: center;
+/* ── Respect user motion preferences ── */
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card::before,
+  .right,
+  .leftContent {
+    transition: none;
+  }
+  .card:hover,
+  .cardPicked {
+    transform: none;
+  }
 }
-.addInput {
-  flex: 1;
-  padding: 8px 12px;
-  border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  font-family: var(--font-ui);
-  background: var(--color-surface-2);
-  color: var(--color-text);
-  transition: border-color var(--transition-fast);
-}
-.addInput:focus { outline: none; border-color: var(--color-primary); background: #fff; }
-
-.emptyHint { font-size: 13px; color: var(--color-danger); text-align: center; }
-
-/* ---- Actions bar ---- */
-.actions { display: flex; justify-content: space-between; align-items: center; padding-top: var(--space-4); }

@@ -6,7 +6,7 @@ html { font-size: 16px; -webkit-font-smoothing: antialiased; }
 
 body {
   font-family: var(--font-ui);
-  background: var(--color-surface-2);
+  background: var(--color-surface-2); /* #f1f5f9 page tint */
   color: var(--color-text);
   min-height: 100dvh;
 }

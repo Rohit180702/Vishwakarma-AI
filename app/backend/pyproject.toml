@@ -14,8 +14,8 @@ dependencies = [
     "anthropic>=0.26.0",
     "python-multipart>=0.0.9",
     "docling>=1.0.0",
-    "sqlalchemy>=2.0.0",
-    "aiosqlite>=0.19.0",
+    "motor>=3.4.0",
+    "beanie>=1.26.0",
 ]
 
 [tool.setuptools.packages.find]

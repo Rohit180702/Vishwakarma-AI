@@ -1,56 +1,27 @@
 /* ── Page ── */
-.page { min-height: 100dvh; display: flex; flex-direction: column; background: #f0f2f5; }
-
-/* ── Header ── */
-.header {
-  display: flex; align-items: center; gap: 16px;
-  padding: 14px 36px;
-  background: #fff; border-bottom: 1px solid #e5e7eb;
-  position: sticky; top: 0; z-index: 10;
-}
-.logo { display: flex; align-items: center; gap: 8px; }
-.logoGlyph { font-size: 20px; }
-.logoText { font-size: 16px; font-weight: 800; color: #1e1b4b; letter-spacing: -0.4px; }
-
+.page { min-height: 100dvh; display: flex; flex-direction: column; background: var(--color-surface-2); }
 
 /* ── Main ── */
 .main {
-  flex: 1; max-width: 600px; width: 100%;
-  margin: 0 auto; padding: 56px 24px 40px;
-  display: flex; flex-direction: column; gap: 24px;
+  flex: 1; max-width: 680px; width: 100%;
+  margin: 0 auto; padding: 56px 24px 48px;
+  display: flex; flex-direction: column; gap: 20px;
   align-items: center;
 }
 
 /* ── Hero ── */
-.hero { text-align: center; }
+.hero { text-align: center; margin-bottom: 8px; }
 .title {
-  font-size: 32px; font-weight: 800; color: #111827;
-  letter-spacing: -0.8px; margin: 0 0 12px;
+  font-size: 36px; font-weight: 700; color: var(--color-text);
+  letter-spacing: -0.035em; line-height: 1.15; margin: 0 0 14px;
 }
-.subtitle { font-size: 16px; color: #6b7280; line-height: 1.6; margin: 0; }
-
-/* ── Saved banner ── */
-.savedBanner {
-  display: flex; align-items: center; gap: 10px;
-  width: 100%; padding: 12px 18px;
-  background: #f0fdf4; border: 1.5px solid #10b981; border-radius: 12px;
-  font-size: 14px; color: #065f46; font-weight: 500;
-}
-.savedDot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: #10b981; flex-shrink: 0;
-  animation: pulse 1.5s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
+.subtitle { font-size: 16px; color: var(--color-text-secondary); line-height: 1.65; margin: 0; max-width: 520px; }
 
 /* ── Error banner ── */
 .errorBanner {
   display: flex; align-items: center; gap: 10px;
   width: 100%; padding: 12px 18px;
-  background: #fef2f2; border: 1.5px solid #fca5a5; border-radius: 12px;
+  background: var(--color-danger-light); border: 1.5px solid #fca5a5; border-radius: 12px;
   font-size: 14px; color: #991b1b;
 }
 
@@ -59,85 +30,66 @@
 
 .reading {
   display: flex; flex-direction: column; align-items: center; gap: 16px;
-  padding: 48px; font-size: 15px; color: #6b7280;
+  padding: 48px; font-size: 15px; color: var(--color-text-secondary);
 }
 .readingSpinner {
   width: 32px; height: 32px; border-radius: 50%;
-  border: 3px solid #e5e7eb; border-top-color: #6366f1;
+  border: 3px solid var(--color-border); border-top-color: var(--color-primary);
   animation: spin .7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .dropzone {
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
-  padding: 48px 32px;
-  border: 2px dashed #d1d5db; border-radius: 20px;
-  background: #fff; cursor: pointer; text-align: center;
-  transition: border-color .15s, background .15s, box-shadow .15s;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  padding: 52px 40px;
+  border: 2.5px solid var(--color-primary); border-radius: 20px;
+  background: var(--color-surface); cursor: pointer; text-align: center;
+  transition: background .2s, border-color .2s;
+  width: 100%;
 }
 .dropzone:hover, .dragging {
-  border-color: #6366f1; background: #f5f3ff;
-  box-shadow: 0 4px 24px rgba(99,102,241,0.12);
+  background: var(--color-primary-light);
 }
-.uploadIcon { color: #6366f1; opacity: .7; }
-.dropLabel { font-size: 17px; font-weight: 700; color: #374151; margin: 0; }
-.dropSub   { font-size: 14px; color: #9ca3af; margin: 0; }
-
-.formatPills { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.pill {
-  display: flex; align-items: center; gap: 4px;
-  font-size: 11px; font-weight: 600; color: #6b7280;
-  background: #f3f4f6; border: 1px solid #e5e7eb;
-  padding: 3px 10px; border-radius: 999px;
-}
+.uploadIcon { color: var(--color-primary); opacity: .8; }
+.dropLabel { font-size: 20px; font-weight: 700; color: var(--color-text); margin: 0; letter-spacing: -0.025em; }
+.dropSub   { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.2em; color: var(--color-text-muted); margin: 0; }
 
 .browseBtn {
-  margin-top: 6px; padding: 8px 22px;
-  background: #6366f1; color: #fff;
-  font-size: 14px; font-weight: 700; border-radius: 10px;
-  transition: background .12s;
+  margin-top: 4px; padding: 9px 24px;
+  background: var(--color-primary); color: #fff;
+  font-size: 14px; font-weight: 700; border-radius: 8px;
+  transition: background .12s; letter-spacing: -0.01em;
 }
-.dropzone:hover .browseBtn { background: #4f46e5; }
+.dropzone:hover .browseBtn, .dragging .browseBtn { background: var(--color-primary-hover); }
 .hiddenInput { display: none; }
 
-/* ── Divider ── */
-.divider {
-  display: flex; align-items: center; gap: 12px; width: 100%;
+/* ── Privacy row ── */
+.privacyRow {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--color-text-muted);
+  margin-top: -4px;
 }
-.divider span:first-child, .divider span:last-child {
-  flex: 1; height: 1px; background: #e5e7eb;
-}
-.dividerText { font-size: 13px; color: #9ca3af; white-space: nowrap; }
 
-/* ── Interview shortcut ── */
-.interviewShortcut {
-  display: flex; align-items: center; gap: 16px;
-  width: 100%; padding: 18px 22px;
-  background: #fff; border: 1.5px solid #e5e7eb; border-radius: 16px;
-  cursor: pointer; text-align: left;
-  transition: border-color .15s, background .15s, box-shadow .15s;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+/* ── Upload CTA ── */
+.uploadBtn {
+  width: 100%; margin-top: 12px; padding: 12px 24px;
+  background: var(--color-primary); color: #fff;
+  border: none; border-radius: 10px; font-family: inherit;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  transition: background .12s; letter-spacing: -0.01em;
+  box-shadow: var(--shadow-btn);
 }
-.interviewShortcut:hover {
-  border-color: #6366f1; background: #f5f3ff;
-  box-shadow: 0 4px 16px rgba(99,102,241,0.1);
-}
-.interviewIcon { color: #6366f1; flex-shrink: 0; }
-.interviewShortcutText { flex: 1; display: flex; flex-direction: column; gap: 3px; }
-.interviewShortcutTitle { font-size: 15px; font-weight: 700; color: #111827; }
-.interviewShortcutSub   { font-size: 13px; color: #6b7280; }
-.interviewArrow { font-size: 18px; color: #6366f1; font-weight: 700; flex-shrink: 0; }
+.uploadBtn:hover:not(:disabled) { background: var(--color-primary-hover); }
+.uploadBtn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-.hint { font-size: 13px; color: #9ca3af; text-align: center; }
-
-/* ── Recent sessions ── */
+/* ── Sessions ── */
 .sessions { width: 100%; display: flex; flex-direction: column; gap: 10px; }
 
 .sessionsHeader {
   display: flex; align-items: center; gap: 6px;
   font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.6px; color: #9ca3af;
+  letter-spacing: 0.15em; color: var(--color-text-muted);
 }
 
 .sessionsList { display: flex; flex-direction: column; gap: 6px; }
@@ -145,17 +97,17 @@
 .sessionItem {
   display: flex; align-items: center; gap: 12px;
   width: 100%; padding: 12px 16px;
-  background: #fff; border: 1.5px solid #e5e7eb; border-radius: 12px;
-  cursor: pointer; text-align: left;
-  font-family: inherit;
+  background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px;
+  cursor: pointer; text-align: left; font-family: inherit;
   transition: border-color .15s, background .15s;
 }
-.sessionItem:hover { border-color: #6366f1; background: #f5f3ff; }
+.sessionItem:hover { border-color: var(--color-primary); background: var(--color-primary-light); }
+.sessionItemActive { border-color: var(--color-primary); background: var(--color-primary-light); }
 
-.sessionFileIcon { color: #6366f1; flex-shrink: 0; }
+.sessionFileIcon { color: var(--color-primary); flex-shrink: 0; }
 
 .sessionName {
-  flex: 1; font-size: 14px; font-weight: 600; color: #111827;
+  flex: 1; font-size: 14px; font-weight: 600; color: var(--color-text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
@@ -164,22 +116,37 @@
 }
 
 .sessionTemplate {
-  font-size: 11px; font-weight: 700; color: #6366f1;
-  background: #eef2ff; border: 1px solid #c7d2fe;
+  font-size: 11px; font-weight: 700; color: var(--color-primary);
+  background: var(--color-primary-light); border: 1px solid var(--color-primary-subtle);
   padding: 2px 8px; border-radius: 999px;
   text-transform: uppercase; letter-spacing: 0.4px;
 }
 
-.sessionDate { font-size: 12px; color: #9ca3af; }
+.stageBadge {
+  font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px;
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+.stageBadge_generate {
+  color: #16a34a; background: #dcfce7; border: 1px solid #bbf7d0;
+}
+.stageBadge_format {
+  color: #b45309; background: #fef3c7; border: 1px solid #fde68a;
+}
+.stageBadge_interview {
+  color: var(--color-primary); background: var(--color-primary-light); border: 1px solid var(--color-primary-subtle);
+}
 
-.sessionArrow { color: #c7d2fe; flex-shrink: 0; }
-.sessionItem:hover .sessionArrow { color: #6366f1; }
+.sessionDate { font-size: 12px; color: var(--color-text-muted); }
+
+.sessionArrow { color: var(--color-primary-subtle); flex-shrink: 0; }
+.sessionItem:hover .sessionArrow { color: var(--color-primary); }
 
 .sessionDelete {
   display: flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 6px;
-  border: none; background: transparent; color: #9ca3af;
+  border: none; background: transparent; color: var(--color-text-muted);
   cursor: pointer; flex-shrink: 0;
   transition: color .12s, background .12s;
 }
-.sessionDelete:hover { color: #dc2626; background: #fee2e2; }
+.sessionDelete:hover { color: var(--color-danger); background: var(--color-danger-light); }

@@ -3,8 +3,7 @@
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Use the venv created in home dir (workaround for colon in path)
-PYTHON="${PYTHON:-$HOME/vishwakarma-venv/bin/python3}"
+PYTHON="${PYTHON:-$SCRIPT_DIR/backend/.venv/bin/python3}"
 
 if [ ! -f "$SCRIPT_DIR/backend/.env" ]; then
   echo "⚠  No .env found. Copying .env.example..."

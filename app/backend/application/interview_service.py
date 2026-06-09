@@ -84,96 +84,77 @@ class InterviewService:
 
         return questions
 
-    def export_to_markdown(self, interview_data: dict[str, Any]) -> str:
+    def format_qa_as_markdown(
+        self,
+        questions: list[dict[str, Any]],
+        answers: list[dict[str, Any]],
+    ) -> str:
         """
-        Convert interview data to markdown format for HLD generation.
+        Render the separated questions + answers lists into a readable markdown block
+        for inclusion in the HLD generation prompt.
 
-        Args:
-            interview_data: The interview data from database
-
-        Returns:
-            Markdown formatted interview results
+        questions: list from questions.json (full question objects, no embedded answers)
+        answers:   list from answers.json   (one record per answered question)
         """
-        if not interview_data or "questions" not in interview_data:
+        if not questions or not answers:
             return ""
 
-        sections = ["# Architectural Interview Results\n"]
-        sections.append(f"**Interview Date:** {interview_data.get('metadata', {}).get('completed_at', 'N/A')}\n")
-        sections.append(f"**Questions Answered:** {interview_data.get('metadata', {}).get('answered', 0)}/{interview_data.get('metadata', {}).get('total_questions', 0)}\n")
-        sections.append("\n---\n")
+        # Index answers by question_id for O(1) lookup
+        answer_by_qid: dict[str, dict[str, Any]] = {a["question_id"]: a for a in answers}
 
-        for i, q_data in enumerate(interview_data.get("questions", []), 1):
-            sections.append(f"\n## Question {i}: {q_data['question']}\n")
-            sections.append(f"**Why Critical:** {q_data['why_critical']}\n")
-            sections.append(f"**Context from Spec:** {q_data['context_from_spec']}\n")
+        lines: list[str] = ["## Architectural Decisions from Interview\n"]
 
-            answer = q_data.get("answer", {})
-            if answer:
-                solution_title = answer.get("solution_title", "Custom answer")
-                was_skipped = answer.get("was_skipped", False)
-                custom_input = answer.get("custom_input", "")
+        for i, q in enumerate(questions, 1):
+            answer = answer_by_qid.get(q["id"])
+            if not answer:
+                continue  # unanswered question — skip
 
-                if was_skipped:
-                    sections.append(f"\n**Decision Made:** {solution_title} ⚠️ *(Used default recommendation)*\n")
-                else:
-                    sections.append(f"\n**Decision Made:** {solution_title} ✅\n")
+            was_skipped = answer.get("was_skipped", False)
+            solution_title = answer.get("solution_title", "")
+            custom_input = answer.get("custom_input", "")
 
-                if custom_input:
-                    sections.append(f"**Additional Context:** {custom_input}\n")
+            decision_marker = "*(default recommendation)*" if was_skipped else ""
+            lines.append(f"\n**Q{i}: {q['question']}**")
+            lines.append(f"→ {solution_title} {decision_marker}".strip())
 
-                # Find the selected solution details
-                selected_sol = None
-                for sol in q_data.get("solutions", []):
-                    if sol["id"] == answer.get("selected_solution_id"):
-                        selected_sol = sol
-                        break
+            if custom_input:
+                lines.append(f"  *Additional context:* {custom_input}")
 
-                if selected_sol:
-                    sections.append(f"\n**Benefits:**\n")
-                    for benefit in selected_sol.get("benefits", []):
-                        sections.append(f"- {benefit}\n")
+            # Pull benefits/risks from the matching solution object in questions.json
+            selected_sol = next(
+                (s for s in q.get("solutions", []) if s["id"] == answer.get("selected_solution_id")),
+                None,
+            )
+            if selected_sol:
+                if selected_sol.get("benefits"):
+                    lines.append(f"  Benefits: {'; '.join(selected_sol['benefits'])}")
+                if selected_sol.get("risks"):
+                    lines.append(f"  Risks: {'; '.join(selected_sol['risks'])}")
 
-                    sections.append(f"\n**Risks:**\n")
-                    for risk in selected_sol.get("risks", []):
-                        sections.append(f"- {risk}\n")
+            # Alternatives considered
+            others = [s["title"] for s in q.get("solutions", []) if s["id"] != answer.get("selected_solution_id")]
+            if others:
+                lines.append(f"  Alternatives considered: {', '.join(others)}")
 
-                    sections.append(f"\n**Trade-offs:**\n")
-                    for tradeoff in selected_sol.get("tradeoffs", []):
-                        sections.append(f"- {tradeoff}\n")
+        return "\n".join(lines)
 
-                # Show alternatives considered
-                other_solutions = [s for s in q_data.get("solutions", []) if s["id"] != answer.get("selected_solution_id")]
-                if other_solutions:
-                    sections.append(f"\n**Other Options Considered:**\n")
-                    for sol in other_solutions:
-                        sections.append(f"- {sol['title']}: {sol['description']}\n")
-
-            sections.append("\n---\n")
-
-        return "".join(sections)
-
-    def build_enhanced_spec(self, original_spec: str, interview_data: dict[str, Any]) -> str:
+    def build_enhanced_spec(
+        self,
+        original_spec: str,
+        questions: list[dict[str, Any]],
+        answers: list[dict[str, Any]],
+    ) -> str:
         """
-        Build enhanced specification combining original spec with interview decisions.
+        Combine the original specification with the interview Q&A for HLD generation.
 
-        This is what gets passed to HLD generation.
-
-        Args:
-            original_spec: The original uploaded specification
-            interview_data: The interview Q&A data
-
-        Returns:
-            Enhanced specification text
+        original_spec: contents of input.md
+        questions:     list from questions.json
+        answers:       list from answers.json
         """
-        sections = []
+        qa_markdown = self.format_qa_as_markdown(questions, answers)
 
-        # Original specification
-        sections.append("# Original Specification\n")
-        sections.append(original_spec)
-        sections.append("\n\n")
+        parts = ["# Original Specification\n", original_spec]
+        if qa_markdown:
+            parts += ["\n\n# Architectural Decisions (from Interview)\n", qa_markdown]
 
-        # Interview decisions
-        sections.append("# Architectural Decisions (from Interview)\n")
-        sections.append(self.export_to_markdown(interview_data))
-
-        return "\n".join(sections)
+        return "\n".join(parts)

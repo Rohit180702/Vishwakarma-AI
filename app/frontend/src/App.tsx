@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import type { HLDDocument, HLDTemplate } from '@/types'
+import type { HLDDocument, HLDTemplate, Section } from '@/types'
 import { SpecUpload } from '@/features/spec-upload/SpecUpload'
 import { InterviewPage } from '@/features/interview/InterviewPage'
 import { FormatSelection } from '@/features/format-selection/FormatSelection'
@@ -10,24 +10,25 @@ export function App() {
   const [specText, setSpecText]     = useState('')
   const [sessionId, setSessionId]   = useState<string | null>(null)
   const [template, setTemplate]     = useState<HLDTemplate | null>(null)
-  const [customSections, setCustomSections]         = useState<string[] | undefined>()
+  const [customSections, setCustomSections]         = useState<Section[] | undefined>()
   const [customTemplateText, setCustomTemplateText] = useState<string | undefined>()
   const [preloadedHld, setPreloadedHld]             = useState<HLDDocument | null>(null)
 
-  const handleSpecReady = (text: string, sessionId?: string) => {
+  const handleSpecReady = (text: string, sid?: string) => {
     setSpecText(text)
-    if (sessionId) setSessionId(sessionId)
+    if (sid) setSessionId(sid)
   }
 
-  const handleFormatSelected = (t: HLDTemplate, sections?: string[], tmplText?: string) => {
+  const handleFormatSelected = (t: HLDTemplate, sections: Section[]) => {
     setTemplate(t)
-    setCustomSections(sections)
-    setCustomTemplateText(tmplText)
+    setCustomSections(sections.length > 0 ? sections : undefined)
+    setCustomTemplateText(undefined)
     setPreloadedHld(null)
   }
 
-  const handleLoadSession = (spec: string, t: HLDTemplate, hld: HLDDocument) => {
+  const handleLoadSession = (spec: string, t: HLDTemplate, hld: HLDDocument, sid?: string) => {
     setSpecText(spec)
+    if (sid) setSessionId(sid)
     setTemplate(t)
     setCustomSections(undefined)
     setCustomTemplateText(undefined)
@@ -42,7 +43,7 @@ export function App() {
         element={<SpecUpload onReady={handleSpecReady} onLoadSession={handleLoadSession} />}
       />
 
-      {/* Step 2 — Interview (requires uploaded spec) */}
+      {/* Step 2 — Interview (requires uploaded spec + session) */}
       <Route
         path="/interview"
         element={
@@ -69,6 +70,7 @@ export function App() {
           specText && template ? (
             <HLDOutput
               specText={specText}
+              sessionId={sessionId ?? undefined}
               template={template}
               customSections={customSections}
               customTemplateText={customTemplateText}

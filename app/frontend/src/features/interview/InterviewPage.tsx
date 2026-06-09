@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, ChevronLeft, CheckCircle2, Sparkles, SkipForward, AlertCircle } from 'lucide-react'
+import { ChevronRight, ChevronLeft, CheckCircle2, Sparkles, SkipForward, AlertCircle, FileSearch, BrainCircuit, ListChecks, Lightbulb } from 'lucide-react'
 import { FlowStepper } from '@/components/FlowStepper/FlowStepper'
+import { AppHeader } from '@/components/AppHeader'
 import { Spinner } from '@/components/Spinner'
 import {
   startInterview,
@@ -10,7 +11,6 @@ import {
   skipAllQuestions,
   getEnhancedSpec,
   type InterviewQuestion,
-  type SolutionOption
 } from '@/api/client'
 import styles from './InterviewPage.module.css'
 
@@ -30,8 +30,13 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
   const [answeredCount, setAnsweredCount] = useState(0)
   const [showSkipDialog, setShowSkipDialog] = useState(false)
   const [showSkipAllDialog, setShowSkipAllDialog] = useState(false)
+  // Guard against React StrictMode double-mount calling Claude twice
+  const startedRef = useRef(false)
 
   useEffect(() => {
+    if (startedRef.current) return
+    startedRef.current = true
+
     async function loadInterview() {
       try {
         setLoading(true)
@@ -39,11 +44,8 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
         setQuestions(response.questions)
         setAnsweredCount(response.progress.answered)
 
-        // Pre-select recommended solution
         const recommended = response.current_question.solutions.find(s => s.recommended)
-        if (recommended) {
-          setSelectedSolutionId(recommended.id)
-        }
+        if (recommended) setSelectedSolutionId(recommended.id)
 
         setLoading(false)
       } catch (err) {
@@ -160,14 +162,7 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
   const remainingCount = questions.length - answeredCount
 
   if (loading && !currentQuestion) {
-    return (
-      <div className={styles.page}>
-        <div className={styles.loading}>
-          <Spinner />
-          <p>Generating questions from your specification...</p>
-        </div>
-      </div>
-    )
+    return <AnalysisLoadingPanel />
   }
 
   if (error) {
@@ -187,19 +182,17 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <div className={styles.logo}>
-          <span className={styles.logoGlyph}>⚙</span>
-          <span className={styles.logoText}>Vishwakarma AI</span>
-        </div>
-        <button
-          className={styles.skipAllBtn}
-          onClick={() => setShowSkipAllDialog(true)}
-          disabled={loading}
-        >
-          Skip entire interview →
-        </button>
-      </header>
+      <AppHeader
+        right={
+          <button
+            className={styles.skipAllBtn}
+            onClick={() => setShowSkipAllDialog(true)}
+            disabled={loading}
+          >
+            Skip entire interview →
+          </button>
+        }
+      />
 
       <FlowStepper current={1} />
 
@@ -406,6 +399,94 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Analysis Loading Panel — shown while Claude generates questions
+// ---------------------------------------------------------------------------
+
+const ANALYSIS_STEPS = [
+  { icon: FileSearch,    label: 'Reading your specification',         ms: 0     },
+  { icon: BrainCircuit, label: 'Identifying architectural gaps',      ms: 3000  },
+  { icon: ListChecks,   label: 'Formulating critical questions',      ms: 8000  },
+  { icon: Lightbulb,    label: 'Generating solution options',         ms: 14000 },
+]
+
+function AnalysisLoadingPanel() {
+  const [activeStep, setActiveStep] = useState(0)
+  const [elapsed, setElapsed] = useState(0)
+
+  useEffect(() => {
+    const start = Date.now()
+    const tick = setInterval(() => {
+      const ms = Date.now() - start
+      setElapsed(ms)
+      const next = [...ANALYSIS_STEPS].reverse().findIndex(s => s.ms <= ms)
+      const idx   = next === -1 ? 0 : ANALYSIS_STEPS.length - 1 - next
+      setActiveStep(idx)
+    }, 300)
+    return () => clearInterval(tick)
+  }, [])
+
+  const slow = elapsed > 22000
+
+  return (
+    <div className={styles.analysisPage}>
+      <AppHeader />
+      <div className={styles.analysisBody}>
+        <div className={styles.analysisCard}>
+          <div className={styles.analysisEyebrow}>Architectural Discovery</div>
+          <h2 className={styles.analysisTitle}>Analysing your specification…</h2>
+          <p className={styles.analysisSub}>
+            Claude is reading your spec to surface the{' '}
+            <strong>6 most critical architectural decisions</strong> you need to make.
+          </p>
+
+          <div className={styles.analysisSteps}>
+            {ANALYSIS_STEPS.map((step, i) => {
+              const done   = i < activeStep
+              const active = i === activeStep
+              const Icon   = step.icon
+              return (
+                <div
+                  key={i}
+                  className={`${styles.analysisStep} ${done ? styles.stepDone : active ? styles.stepActive : styles.stepPending}`}
+                >
+                  <div className={styles.stepIconWrap}>
+                    {done
+                      ? <CheckCircle2 size={15} className={styles.stepCheckIcon} />
+                      : active
+                        ? <span className={styles.stepSpinner} />
+                        : <Icon size={15} className={styles.stepPendingIcon} />
+                    }
+                  </div>
+                  <span className={styles.stepLabel}>{step.label}</span>
+                  {active && <span className={styles.stepPulse} />}
+                </div>
+              )
+            })}
+          </div>
+
+          <div className={styles.analysisBarWrap}>
+            <div className={styles.analysisBarTrack}>
+              <div
+                className={styles.analysisBarFill}
+                style={{ width: `${Math.min(((activeStep + 1) / ANALYSIS_STEPS.length) * 100, 90)}%` }}
+              />
+            </div>
+          </div>
+
+          {slow ? (
+            <p className={styles.analysisSlow}>
+              Taking a bit longer — Claude is being thorough with your spec.
+            </p>
+          ) : (
+            <p className={styles.analysisNote}>Typically 15–25 seconds · No action needed</p>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

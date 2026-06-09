@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:4173"]
     log_level: str = "INFO"
+    mongodb_url: str = "mongodb://localhost:27017"
+    mongodb_db_name: str = "vishwakarma"
+    data_dir: str = "./data"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

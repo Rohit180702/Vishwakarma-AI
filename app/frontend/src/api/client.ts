@@ -123,11 +123,20 @@ export interface SessionSummary {
   project_name: string
   template: string
   created_at: string
+  stage: 'interview' | 'format' | 'generate'
+}
+
+export interface QAPair {
+  question: string
+  decision: string
+  was_skipped: boolean
+  custom_input: string
 }
 
 export interface SessionDetail extends SessionSummary {
   spec_text: string
   hld_json: string
+  qa_pairs: QAPair[]
 }
 
 export interface UploadedDocumentInfo {
@@ -157,10 +166,12 @@ export function saveSession(
   template: string,
   specText: string,
   hldJson: string,
+  sessionId?: string,
 ): Promise<SessionSummary> {
   return request<SessionSummary>('/sessions', {
     method: 'POST',
     body: JSON.stringify({
+      session_id: sessionId ?? null,
       project_name: projectName,
       template,
       spec_text: specText,

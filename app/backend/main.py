@@ -38,7 +38,7 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def on_startup() -> None:
-        await init_db()
+        await init_db(settings.mongodb_url, settings.mongodb_db_name)
         logger.info("Database initialised")
 
     app.include_router(hld.router, prefix="/api/v1")

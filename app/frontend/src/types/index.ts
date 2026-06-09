@@ -48,6 +48,15 @@ export interface ChatMessage {
   content: string
 }
 
+/**
+ * A single HLD section with an optional hint that gets forwarded to
+ * the LLM as guidance for what to write in that section.
+ */
+export interface Section {
+  name: string
+  hint: string   // empty string when the user hasn't provided one
+}
+
 export interface TemplateOption {
   id: HLDTemplate
   name: string
