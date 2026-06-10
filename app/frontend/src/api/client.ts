@@ -3,7 +3,7 @@
  * Throws typed ApiError on non-2xx; callers never need to check status manually.
  */
 
-import type { HLDDocument, HLDTemplate } from '@/types'
+import type { HLDDocument, HLDEditCommand, HLDTemplate } from '@/types'
 
 const BASE = '/api/v1'
 
@@ -69,6 +69,7 @@ export async function streamHLD(
   signal?: AbortSignal,
   customSections?: string[],
   customTemplateText?: string,
+  thoughtworksMode?: boolean,
 ): Promise<void> {
   const res = await fetch(`${BASE}/hld/generate/stream`, {
     method: 'POST',
@@ -78,6 +79,7 @@ export async function streamHLD(
       template,
       custom_sections: customSections ?? null,
       custom_template_text: customTemplateText ?? null,
+      thoughtworks_mode: thoughtworksMode ?? false,
     }),
     signal,
   })
@@ -208,6 +210,29 @@ export async function uploadSpecFiles(files: File[]): Promise<UploadSessionRespo
 }
 
 // ---------------------------------------------------------------------------
+// Diagram conversational query
+// ---------------------------------------------------------------------------
+
+export interface DiagramStep {
+  node_id: string
+  explanation: string
+}
+
+export interface DiagramQueryResult {
+  steps: DiagramStep[]
+}
+
+export function queryDiagram(
+  question: string,
+  diagram: object,
+): Promise<DiagramQueryResult> {
+  return request<DiagramQueryResult>('/hld/diagram/query', {
+    method: 'POST',
+    body: JSON.stringify({ question, diagram }),
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Chat
 // ---------------------------------------------------------------------------
 
@@ -222,12 +247,26 @@ export function sendChat(
   })
 }
 
+// Regex to detect an HLD_EDIT marker embedded in the streamed response text
+const HLD_EDIT_RE = /<!--\s*HLD_EDIT:([\s\S]*?)-->/i
+
+/** Parse an HLD_EDIT command out of accumulated text, returns null if none found. */
+function parseEditCommand(text: string): HLDEditCommand | null {
+  const m = HLD_EDIT_RE.exec(text)
+  if (!m) return null
+  try {
+    return JSON.parse(m[1].trim()) as HLDEditCommand
+  } catch {
+    return null
+  }
+}
+
 export async function streamChat(
   hld: HLDDocument,
   history: Array<{ role: string; content: string }>,
   message: string,
   onToken: (token: string) => void,
-  onDone: () => void,
+  onDone: (edit: HLDEditCommand | null) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const res = await fetch(`${BASE}/hld/chat/stream`, {
@@ -242,6 +281,7 @@ export async function streamChat(
 
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
   let buffer = ''
+  let accumulated = ''
 
   while (true) {
     const { done, value } = await reader.read()
@@ -254,14 +294,18 @@ export async function streamChat(
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue
       const payload = line.slice(6).trim()
-      if (payload === '[DONE]') { onDone(); return }
+      if (payload === '[DONE]') {
+        onDone(parseEditCommand(accumulated))
+        return
+      }
       try {
         const { token } = JSON.parse(payload) as { token: string }
+        accumulated += token
         onToken(token)
       } catch { /* skip malformed lines */ }
     }
   }
-  onDone()
+  onDone(parseEditCommand(accumulated))
 }
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ import { Button } from '@/components/Button'
 import { AlertTriangle } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { streamHLD, saveSession, ApiError } from '@/api/client'
-import type { HLDDocument, HLDTemplate, Section } from '@/types'
+import type { HLDDocument, HLDEditCommand, HLDTemplate, Section } from '@/types'
 import { TEMPLATE_OPTIONS } from '@/types'
 import { ChatPanel } from './ChatPanel'
 import { DocumentPanel } from './DocumentPanel'
@@ -21,17 +21,19 @@ interface HLDOutputProps {
   customSections?: Section[]
   customTemplateText?: string
   preloadedHld?: HLDDocument | null
+  thoughtworksMode?: boolean
 }
 
 type Tab = 'document' | 'diagram' | 'adrs'
 type GenState = 'idle' | 'generating' | 'done' | 'error'
 
-export function HLDOutput({ specText, sessionId, template, customSections, customTemplateText, preloadedHld }: HLDOutputProps) {
+export function HLDOutput({ specText, sessionId, template, customSections, customTemplateText, preloadedHld, thoughtworksMode = false }: HLDOutputProps) {
   const [genState, setGenState] = useState<GenState>(preloadedHld ? 'done' : 'idle')
   const [rawTokens, setRawTokens] = useState('')
   const [hld, setHld] = useState<HLDDocument | null>(preloadedHld ?? null)
   const [errorMsg, setErrorMsg] = useState('')
   const [activeTab, setActiveTab] = useState<Tab>('document')
+  const [editedSectionKey, setEditedSectionKey] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const navigate = useNavigate()
 
@@ -71,13 +73,14 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
         // Send only section names to the backend; hints are UI-only for now
         customSections?.map(s => s.name),
         customTemplateText,
+        thoughtworksMode,
       )
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return
       setErrorMsg(err instanceof ApiError ? err.detail : 'Generation failed')
       setGenState('error')
     }
-  }, [specText, template, customSections, customTemplateText])
+  }, [specText, template, customSections, customTemplateText, thoughtworksMode])
 
   useEffect(() => {
     generate()
@@ -91,6 +94,41 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
       sections: hld.sections.map(s => s.key === key ? { ...s, content } : s),
     })
   }
+
+  const handleChatEdit = useCallback((cmd: HLDEditCommand) => {
+    setHld(prev => {
+      if (!prev) return prev
+
+      if (cmd.type === 'update_section') {
+        return {
+          ...prev,
+          sections: prev.sections.map(s => {
+            if (s.key !== cmd.key) return s
+            return {
+              ...s,
+              content: cmd.content,
+              ...(cmd.title ? { title: cmd.title } : {}),
+            }
+          }),
+        }
+      }
+
+      if (cmd.type === 'update_adr') {
+        return {
+          ...prev,
+          adrs: prev.adrs.map(a => {
+            if (a.id !== cmd.id) return a
+            const field = cmd.field as keyof typeof a
+            return { ...a, [field]: cmd.value }
+          }),
+        }
+      }
+
+      return prev
+    })
+
+    setEditedSectionKey(cmd.type === 'update_section' ? cmd.key : null)
+  }, [])
 
   if (genState === 'generating') {
     return (
@@ -123,7 +161,7 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
     <div className={styles.shell}>
       {/* Left — chat */}
       <aside className={styles.chatCol} aria-label="Architecture sidekick">
-        <ChatPanel hld={hld} />
+        <ChatPanel hld={hld} onEdit={handleChatEdit} />
       </aside>
 
       {/* Main — tabs + content */}
@@ -163,7 +201,7 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
         >
           {activeTab === 'document' ? (
             <div className={styles.docScroll}>
-              <DocumentPanel hld={hld} onSectionEdit={handleSectionEdit} />
+              <DocumentPanel hld={hld} onSectionEdit={handleSectionEdit} scrollToKey={editedSectionKey} onScrolled={() => setEditedSectionKey(null)} />
             </div>
           ) : activeTab === 'diagram' ? (
             <div className={styles.diagramWrap}>

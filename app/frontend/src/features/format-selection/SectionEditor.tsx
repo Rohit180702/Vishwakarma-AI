@@ -12,7 +12,9 @@ interface SectionEditorProps {
   onClose: () => void
 }
 
-export function SectionEditor({ selected, selectedName, sections, onSectionsChange, onClose }: SectionEditorProps) {
+export function SectionEditor({
+  selected, selectedName, sections, onSectionsChange, onClose,
+}: SectionEditorProps) {
   const [newSection, setNewSection] = useState('')
   const [expandedHints, setExpandedHints] = useState<Set<number>>(new Set())
   const dragIdx = useRef<number | null>(null)
@@ -168,6 +170,7 @@ export function SectionEditor({ selected, selectedName, sections, onSectionsChan
           {sections.length === 0 && (
             <p id={emptyId} className={styles.emptyHint} role="alert">Add at least one section to continue.</p>
           )}
+
         </>
       )}
     </aside>

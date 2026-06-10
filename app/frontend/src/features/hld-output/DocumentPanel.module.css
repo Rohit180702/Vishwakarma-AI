@@ -32,8 +32,23 @@
 /* ── Individual section card ── */
 .section {
   margin-bottom: 48px;
+  border-radius: 8px;
+  transition: outline 0.2s ease, background 0.4s ease;
 }
 .sectionCollapsed { margin-bottom: 20px; }
+
+.sectionHighlighted {
+  outline: 2px solid #3b82f6;
+  outline-offset: 6px;
+  background: rgba(59, 130, 246, 0.04);
+  animation: sectionFadeHighlight 2.5s ease forwards;
+}
+
+@keyframes sectionFadeHighlight {
+  0%   { outline-color: #3b82f6; background: rgba(59, 130, 246, 0.08); }
+  60%  { outline-color: #3b82f6; background: rgba(59, 130, 246, 0.04); }
+  100% { outline-color: transparent; background: transparent; }
+}
 
 /* ── Section collapse toggle button ── */
 .sectionHead {
@@ -97,7 +112,7 @@
 .sectionContent {
   font-size: 14px;
   line-height: 1.9;
-  color: var(--color-text-secondary);
+  color: var(--color-text);
 }
 .sectionContent :global(h2),
 .sectionContent :global(h3),
@@ -135,6 +150,7 @@
   border: 1px solid var(--color-border);
   vertical-align: top;
   line-height: 1.5;
+  color: var(--color-text);
 }
 .sectionContent :global(tr:nth-child(even) td) {
   background: var(--color-surface-2);

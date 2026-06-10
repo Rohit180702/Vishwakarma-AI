@@ -13,17 +13,19 @@ export function App() {
   const [customSections, setCustomSections]         = useState<Section[] | undefined>()
   const [customTemplateText, setCustomTemplateText] = useState<string | undefined>()
   const [preloadedHld, setPreloadedHld]             = useState<HLDDocument | null>(null)
+  const [thoughtworksMode, setThoughtworksMode]     = useState(false)
 
   const handleSpecReady = (text: string, sid?: string) => {
     setSpecText(text)
     if (sid) setSessionId(sid)
   }
 
-  const handleFormatSelected = (t: HLDTemplate, sections: Section[]) => {
+  const handleFormatSelected = (t: HLDTemplate, sections: Section[], twMode: boolean) => {
     setTemplate(t)
     setCustomSections(sections.length > 0 ? sections : undefined)
     setCustomTemplateText(undefined)
     setPreloadedHld(null)
+    setThoughtworksMode(twMode)
   }
 
   const handleLoadSession = (spec: string, t: HLDTemplate, hld: HLDDocument, sid?: string) => {
@@ -75,6 +77,7 @@ export function App() {
               customSections={customSections}
               customTemplateText={customTemplateText}
               preloadedHld={preloadedHld}
+              thoughtworksMode={thoughtworksMode}
             />
           ) : (
             <Navigate to="/" replace />

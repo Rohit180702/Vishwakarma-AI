@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import mermaid from 'mermaid'
@@ -69,19 +69,38 @@ const markdownComponents: Components = {
 interface DocumentPanelProps {
   hld: HLDDocument
   onSectionEdit?: (key: string, newContent: string) => void
+  /** Key of section to scroll into view (from a chat edit) */
+  scrollToKey?: string | null
+  /** Called once the scroll has been triggered, so parent can clear the key */
+  onScrolled?: () => void
 }
 
-export function DocumentPanel({ hld, onSectionEdit }: DocumentPanelProps) {
+export function DocumentPanel({ hld, onSectionEdit, scrollToKey, onScrolled }: DocumentPanelProps) {
   const [editingKey, setEditingKey]   = useState<string | null>(null)
   const [draftContent, setDraftContent] = useState('')
-  // All sections expanded by default
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [highlightedKey, setHighlightedKey] = useState<string | null>(null)
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  // Scroll to and highlight a section when scrollToKey changes
+  useEffect(() => {
+    if (!scrollToKey) return
+    const el = sectionRefs.current[scrollToKey]
+    if (el) {
+      // Ensure expanded
+      setCollapsed(prev => ({ ...prev, [scrollToKey]: false }))
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setHighlightedKey(scrollToKey)
+      const timer = setTimeout(() => setHighlightedKey(null), 2500)
+      onScrolled?.()
+      return () => clearTimeout(timer)
+    }
+  }, [scrollToKey, onScrolled])
 
   const toggleSection = (key: string) =>
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }))
 
   const startEdit = (section: HLDSection) => {
-    // Ensure section is open when editing
     setCollapsed(prev => ({ ...prev, [section.key]: false }))
     setEditingKey(section.key)
     setDraftContent(section.content)
@@ -91,6 +110,10 @@ export function DocumentPanel({ hld, onSectionEdit }: DocumentPanelProps) {
     onSectionEdit?.(key, draftContent)
     setEditingKey(null)
   }
+
+  const setRef = useCallback((key: string) => (el: HTMLDivElement | null) => {
+    sectionRefs.current[key] = el
+  }, [])
 
   return (
     <div className={styles.doc}>
@@ -108,13 +131,18 @@ export function DocumentPanel({ hld, onSectionEdit }: DocumentPanelProps) {
       </div>
 
       {hld.sections.map(section => {
-        const isCollapsed = !!collapsed[section.key]
-        const isEditing   = editingKey === section.key
+        const isCollapsed  = !!collapsed[section.key]
+        const isEditing    = editingKey === section.key
+        const isHighlighted = highlightedKey === section.key
         return (
-          <div key={section.key} className={`${styles.section} ${isCollapsed ? styles.sectionCollapsed : ''}`}>
-            {/* ── Section label (indigo line + uppercase) ── */}
+          <div
+            key={section.key}
+            ref={setRef(section.key)}
+            className={`${styles.section} ${isCollapsed ? styles.sectionCollapsed : ''} ${isHighlighted ? styles.sectionHighlighted : ''}`}
+          >
+            {/* ── Section label (indigo line + section number) ── */}
             <div className={styles.sectionLabel}>
-              {section.number} · {section.title.toUpperCase()}
+              {String(section.number).padStart(2, '0')}
             </div>
 
             {/* ── Section title row ── */}

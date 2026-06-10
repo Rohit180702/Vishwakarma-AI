@@ -1,7 +1,46 @@
 // All shared TypeScript types — mirroring the backend domain models.
 
 export type HLDTemplate = 'arc42' | 'c4-adr' | 'rfc-design-doc' | 'custom'
-export type DiagramLevel = 'context' | 'container' | 'component'
+export type DiagramLevel = 'context' | 'container' | 'component' | 'sequence' | 'deployment'
+
+export type C4NodeType =
+  | 'person'
+  | 'system'
+  | 'external_system'
+  | 'container'
+  | 'component'
+  | 'database'
+  | 'queue'
+  | 'cache'
+  | 'frontend'
+  | 'cloud_service'
+
+export interface C4Node {
+  id: string
+  type: C4NodeType
+  label: string
+  description?: string
+  technology?: string
+}
+
+export interface C4Relationship {
+  // Non-streaming API path (Pydantic serialized)
+  from_id?: string
+  to_id?: string
+  // Streaming / session-storage path (raw LLM JSON)
+  from?: string
+  to?: string
+  label?: string
+  technology?: string
+  async_comm?: boolean
+  async?: boolean
+}
+
+export interface C4Boundary {
+  id: string
+  label: string
+  node_ids: string[]
+}
 export type MessageRole = 'user' | 'assistant'
 
 export interface HLDSection {
@@ -32,7 +71,11 @@ export interface ADR {
 
 export interface C4Diagram {
   level: DiagramLevel
-  mermaid_syntax: string
+  title?: string
+  nodes: C4Node[]
+  relationships: C4Relationship[]
+  boundaries: C4Boundary[]
+  mermaid_syntax?: string  // sequence diagrams only
 }
 
 export interface HLDDocument {
@@ -46,7 +89,17 @@ export interface HLDDocument {
 export interface ChatMessage {
   role: MessageRole
   content: string
+  /** Applied edit (stripped from content before display) */
+  edit?: HLDEditCommand
 }
+
+// ---------------------------------------------------------------------------
+// Live edit commands — emitted by the LLM inside chat responses
+// ---------------------------------------------------------------------------
+
+export type HLDEditCommand =
+  | { type: 'update_section'; key: string; content: string; title?: string }
+  | { type: 'update_adr'; id: string; field: string; value: string }
 
 /**
  * A single HLD section with an optional hint that gets forwarded to

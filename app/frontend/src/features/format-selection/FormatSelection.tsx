@@ -11,7 +11,7 @@ import { SectionEditor } from './SectionEditor'
 import styles from './FormatSelection.module.css'
 
 interface FormatSelectionProps {
-  onSelected: (template: HLDTemplate, sections: Section[]) => void
+  onSelected: (template: HLDTemplate, sections: Section[], thoughtworksMode: boolean) => void
   onBack?: () => void
 }
 
@@ -31,8 +31,9 @@ const ALL_OPTIONS: CardOption[] = [
 ]
 
 export function FormatSelection({ onSelected, onBack }: FormatSelectionProps) {
-  const [selected, setSelected]     = useState<HLDTemplate | null>(null)
-  const [sections, setSections]     = useState<Section[]>([])
+  const [selected, setSelected]           = useState<HLDTemplate | null>(null)
+  const [sections, setSections]           = useState<Section[]>([])
+  const [thoughtworksMode, setTWMode]     = useState(false)
   const gridRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
 
@@ -43,7 +44,7 @@ export function FormatSelection({ onSelected, onBack }: FormatSelectionProps) {
 
   const handleContinue = () => {
     if (!selected || sections.length === 0) return
-    onSelected(selected, sections)
+    onSelected(selected, sections, thoughtworksMode)
     navigate('/generate')
   }
 
@@ -101,6 +102,32 @@ export function FormatSelection({ onSelected, onBack }: FormatSelectionProps) {
                   onPick={() => pickTemplate(opt.id, opt.default_sections ?? [])}
                 />
               ))}
+            </div>
+
+            {/* ThoughtWorks toggle — always visible below the template grid */}
+            <div className={styles.twToggleWrap}>
+              <div className={styles.twToggleTop}>
+                <div className={styles.twToggleMeta}>
+                  <label className={styles.twToggleLabel} htmlFor="tw-mode-toggle">
+                    ThoughtWorks aligned
+                  </label>
+                  <p className={styles.twToggleDesc}>
+                    {thoughtworksMode
+                      ? 'Active — adds evolutionary architecture, Team Topologies, fitness functions, and TW engineering principles.'
+                      : 'Enable to augment the standard template with ThoughtWorks engineering principles.'}
+                  </p>
+                </div>
+                <button
+                  id="tw-mode-toggle"
+                  role="switch"
+                  aria-checked={thoughtworksMode}
+                  onClick={() => setTWMode(v => !v)}
+                  className={`${styles.twToggleSwitch} ${thoughtworksMode ? styles.twToggleOn : ''}`}
+                  aria-label="Toggle ThoughtWorks engineering principles"
+                >
+                  <span className={styles.twToggleThumb} />
+                </button>
+              </div>
             </div>
           </div>
         </div>
