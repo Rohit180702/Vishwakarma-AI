@@ -1,14 +1,19 @@
 /* ── Page ── */
 .page { min-height: 100dvh; display: flex; flex-direction: column; background: var(--color-surface-2); }
 
-.skipAllBtn {
-  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--color-text-muted);
-  background: none; border: 1.5px solid var(--color-border); cursor: pointer;
-  padding: 6px 14px; border-radius: 6px; font-family: var(--font-ui); transition: all .12s;
+.footerRow {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 4px;
 }
-.skipAllBtn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-light); }
-.skipAllBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.skipAllLink {
+  font-size: 11px; font-weight: 500;
+  color: var(--color-text-muted); background: none; border: none;
+  cursor: pointer; padding: 0; font-family: var(--font-ui);
+  text-decoration: underline; text-decoration-color: transparent;
+  transition: color .12s, text-decoration-color .12s;
+}
+.skipAllLink:hover:not(:disabled) { color: var(--color-danger); text-decoration-color: var(--color-danger); }
+.skipAllLink:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── Body ── */
 .body {
@@ -232,6 +237,11 @@
 @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.7); } }
 
 /* progress bar */
+.analysisSpinnerRow {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  margin: 20px 0 8px;
+}
+.analysisElapsed { font-size: 13px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
 .analysisBarWrap { margin-top: 4px; }
 .analysisBarTrack {
   height: 4px; border-radius: 999px;
@@ -296,9 +306,11 @@
   color: var(--color-text); display: flex; align-items: center; gap: 8px;
 }
 .recommendedBadge {
-  display: inline-block; font-size: 10px; font-weight: 700;
-  color: var(--color-warning); background: var(--color-warning-light);
-  padding: 2px 8px; border-radius: 4px; letter-spacing: 0.3px;
+  display: inline-block; font-size: 10px; font-weight: 500;
+  color: var(--color-text-muted); background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  padding: 1px 7px; border-radius: 999px; letter-spacing: 0.2px;
+  vertical-align: middle; margin-left: 6px;
 }
 
 .solutionDescription { margin: 0 0 12px 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; }

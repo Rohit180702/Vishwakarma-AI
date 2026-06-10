@@ -48,11 +48,6 @@ export function FormatSelection({ onSelected, onBack }: FormatSelectionProps) {
     navigate('/generate')
   }
 
-  const CUSTOM_DEFAULT: Section[] = [
-    { name: 'Overview', hint: '' }, { name: 'Architecture', hint: '' },
-    { name: 'Decisions', hint: '' }, { name: 'Risks', hint: '' },
-  ]
-
   // Roving tabindex: arrow keys move between radio options
   const handleGridKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return

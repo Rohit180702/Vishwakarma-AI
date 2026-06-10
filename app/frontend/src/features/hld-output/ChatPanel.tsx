@@ -3,7 +3,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { ChatMessage, HLDDocument, HLDEditCommand } from '@/types'
 import { streamChat, ApiError } from '@/api/client'
-import { Send, Sparkles, User, Loader2 } from 'lucide-react'
+import { Send, Sparkles, User, Loader2, Square } from 'lucide-react'
+import { useToast } from '@/components/Toast/ToastContext'
 import styles from './ChatPanel.module.css'
 
 // Strip the HLD_EDIT marker from the displayed text
@@ -11,20 +12,43 @@ const EDIT_MARKER_RE = /<!--\s*HLD_EDIT:[\s\S]*?-->/gi
 
 interface ChatPanelProps {
   hld: HLDDocument
+  sessionId?: string | null
   onEdit?: (cmd: HLDEditCommand) => void
 }
 
-export function ChatPanel({ hld, onEdit }: ChatPanelProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: 'assistant',
-      content: `Hi! I've reviewed the **${hld.project_name}** HLD. Ask me to explain any section, challenge a decision, or apply changes.\n\nFor example: *"Why did we choose this caching strategy?"*, *"What are the risks in Section 3?"*, or *"Rename section 1.2 to Performance Goals."*`,
-    },
-  ])
+const WELCOME = (projectName: string): ChatMessage => ({
+  role: 'assistant',
+  content: `Hi! I've reviewed the **${projectName}** HLD. Ask me to explain any section, challenge a decision, or apply changes.\n\nFor example: *"Why did we choose this caching strategy?"*, *"What are the risks in Section 3?"*, or *"Rename section 1.2 to Performance Goals."*`,
+})
+
+function chatKey(sessionId: string | null | undefined, projectName: string) {
+  return `vk_chat_${sessionId ?? projectName}`
+}
+
+function readChatHistory(key: string, fallback: ChatMessage): ChatMessage[] {
+  try {
+    const raw = sessionStorage.getItem(key)
+    if (raw) return JSON.parse(raw) as ChatMessage[]
+  } catch { /* ignore */ }
+  return [fallback]
+}
+
+export function ChatPanel({ hld, sessionId, onEdit }: ChatPanelProps) {
+  const storageKey = chatKey(sessionId, hld.project_name)
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    readChatHistory(storageKey, WELCOME(hld.project_name))
+  )
+  const { showToast } = useToast()
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+
+  // Persist chat history; skip while streaming to avoid saving partial messages
+  useEffect(() => {
+    if (streaming) return
+    try { sessionStorage.setItem(storageKey, JSON.stringify(messages)) } catch { /* ignore */ }
+  }, [messages, streaming, storageKey])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -58,7 +82,6 @@ export function ChatPanel({ hld, onEdit }: ChatPanelProps) {
           })
         },
         (edit) => {
-          // Strip edit marker from displayed text; attach edit metadata
           const cleanContent = assistantContent.replace(EDIT_MARKER_RE, '').trim()
           setMessages(prev => {
             const updated = [...prev]
@@ -75,13 +98,29 @@ export function ChatPanel({ hld, onEdit }: ChatPanelProps) {
         abortRef.current.signal,
       )
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return
+      if (err instanceof Error && err.name === 'AbortError') {
+        // Keep whatever was streamed so far; just mark as stopped
+        setMessages(prev => {
+          const updated = [...prev]
+          const last = updated[updated.length - 1]
+          if (last?.role === 'assistant') {
+            updated[updated.length - 1] = {
+              ...last,
+              content: last.content || '*(stopped)*',
+            }
+          }
+          return updated
+        })
+        setStreaming(false)
+        return
+      }
       const msg = err instanceof ApiError ? err.detail : 'Failed to get a response'
       setMessages(prev => {
         const updated = [...prev]
         updated[updated.length - 1] = { role: 'assistant', content: `⚠️ ${msg}` }
         return updated
       })
+      showToast(msg, 'error')
       setStreaming(false)
     }
   }, [hld, input, messages, onEdit, streaming])
@@ -133,14 +172,25 @@ export function ChatPanel({ hld, onEdit }: ChatPanelProps) {
           disabled={streaming}
           aria-label="Chat input"
         />
-        <button
-          className={styles.sendBtn}
-          onClick={send}
-          disabled={!input.trim() || streaming}
-          aria-label="Send message"
-        >
-          {streaming ? <Loader2 size={16} className={styles.sendSpinner} /> : <Send size={16} />}
-        </button>
+        {streaming ? (
+          <button
+            className={styles.stopBtn}
+            onClick={() => abortRef.current?.abort()}
+            aria-label="Stop generating"
+            title="Stop"
+          >
+            <Square size={14} />
+          </button>
+        ) : (
+          <button
+            className={styles.sendBtn}
+            onClick={send}
+            disabled={!input.trim()}
+            aria-label="Send message"
+          >
+            <Send size={16} />
+          </button>
+        )}
       </div>
     </div>
   )

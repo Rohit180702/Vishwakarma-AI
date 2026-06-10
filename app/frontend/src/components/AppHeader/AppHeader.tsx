@@ -9,9 +9,14 @@ export function AppHeader({ right }: AppHeaderProps) {
     <header className={styles.header}>
       <div className={styles.logo}>
         <div className={styles.logoMark}>
-          {/* waveform / ECG — matches design-preview logo */}
-          <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+          {/* Isometric cube — three faces represent architecture layers */}
+          <svg viewBox="0 0 24 24" fill="none">
+            {/* Top face */}
+            <path d="M12 2 L22 7 L12 12 L2 7 Z" fill="rgba(255,255,255,0.95)" />
+            {/* Left face */}
+            <path d="M2 7 L2 17 L12 22 L12 12 Z" fill="rgba(255,255,255,0.5)" />
+            {/* Right face */}
+            <path d="M22 7 L22 17 L12 22 L12 12 Z" fill="rgba(255,255,255,0.75)" />
           </svg>
         </div>
         <span className={styles.logoName}>Vishwakarma AI</span>

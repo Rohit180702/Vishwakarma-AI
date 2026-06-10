@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import type { HLDDocument, HLDTemplate, Section } from '@/types'
 import { SpecUpload } from '@/features/spec-upload/SpecUpload'
@@ -6,18 +6,44 @@ import { InterviewPage } from '@/features/interview/InterviewPage'
 import { FormatSelection } from '@/features/format-selection/FormatSelection'
 import { HLDOutput } from '@/features/hld-output'
 
+// ---------------------------------------------------------------------------
+// Session-level state persistence — survives F5 within the same browser tab.
+// We store only what's needed to rehydrate each route; large blobs like
+// customTemplateText are omitted deliberately.
+// ---------------------------------------------------------------------------
+const SS_KEY = 'vk_session'
+
+function readSaved(): Record<string, unknown> {
+  try { return JSON.parse(sessionStorage.getItem(SS_KEY) ?? '{}') } catch { return {} }
+}
+
 export function App() {
-  const [specText, setSpecText]     = useState('')
-  const [sessionId, setSessionId]   = useState<string | null>(null)
-  const [template, setTemplate]     = useState<HLDTemplate | null>(null)
-  const [customSections, setCustomSections]         = useState<Section[] | undefined>()
-  const [customTemplateText, setCustomTemplateText] = useState<string | undefined>()
-  const [preloadedHld, setPreloadedHld]             = useState<HLDDocument | null>(null)
-  const [thoughtworksMode, setThoughtworksMode]     = useState(false)
+  const saved = readSaved()
+
+  const [specText, setSpecText]     = useState<string>((saved.specText as string) ?? '')
+  const [sessionId, setSessionId]   = useState<string | null>((saved.sessionId as string) ?? null)
+  const [template, setTemplate]     = useState<HLDTemplate | null>((saved.template as HLDTemplate) ?? null)
+  const [customSections, setCustomSections]         = useState<Section[] | undefined>((saved.customSections as Section[]) ?? undefined)
+  const [customTemplateText, setCustomTemplateText] = useState<string | undefined>(undefined)
+  const [preloadedHld, setPreloadedHld]             = useState<HLDDocument | null>((saved.preloadedHld as HLDDocument) ?? null)
+  const [thoughtworksMode, setThoughtworksMode]     = useState<boolean>((saved.thoughtworksMode as boolean) ?? false)
+
+  // Persist whenever relevant state changes
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(SS_KEY, JSON.stringify({
+        specText, sessionId, template, customSections, preloadedHld, thoughtworksMode,
+      }))
+    } catch { /* storage quota exceeded — swallow silently */ }
+  }, [specText, sessionId, template, customSections, preloadedHld, thoughtworksMode])
 
   const handleSpecReady = (text: string, sid?: string) => {
     setSpecText(text)
     if (sid) setSessionId(sid)
+    // Clear downstream state when a new spec is loaded
+    setTemplate(null)
+    setPreloadedHld(null)
+    setCustomSections(undefined)
   }
 
   const handleFormatSelected = (t: HLDTemplate, sections: Section[], twMode: boolean) => {
@@ -65,7 +91,7 @@ export function App() {
         }
       />
 
-      {/* Step 5 — HLD output */}
+      {/* Step 4 — HLD output */}
       <Route
         path="/generate"
         element={

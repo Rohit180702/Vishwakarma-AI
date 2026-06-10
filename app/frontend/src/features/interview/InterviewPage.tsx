@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, ChevronLeft, CheckCircle2, Sparkles, SkipForward, AlertCircle, FileSearch, BrainCircuit, ListChecks, Lightbulb } from 'lucide-react'
+import { ChevronRight, ChevronLeft, CheckCircle2, Sparkles, SkipForward, AlertCircle } from 'lucide-react'
 import { FlowStepper } from '@/components/FlowStepper/FlowStepper'
 import { AppHeader } from '@/components/AppHeader'
 import { Spinner } from '@/components/Spinner'
@@ -30,6 +30,8 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
   const [answeredCount, setAnsweredCount] = useState(0)
   const [showSkipDialog, setShowSkipDialog] = useState(false)
   const [showSkipAllDialog, setShowSkipAllDialog] = useState(false)
+  // Stores the user's actual selection per question so Back restores it
+  const savedAnswers = useRef<Record<string, { solutionId: string; customInput: string }>>({})
   // Guard against React StrictMode double-mount calling Claude twice
   const startedRef = useRef(false)
 
@@ -43,10 +45,6 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
         const response = await startInterview(sessionId)
         setQuestions(response.questions)
         setAnsweredCount(response.progress.answered)
-
-        const recommended = response.current_question.solutions.find(s => s.recommended)
-        if (recommended) setSelectedSolutionId(recommended.id)
-
         setLoading(false)
       } catch (err) {
         console.error('Failed to start interview:', err)
@@ -64,6 +62,9 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
   const handleNext = async () => {
     if (!selectedSolutionId) return
 
+    // Persist the user's actual selection before advancing
+    savedAnswers.current[currentQuestion.id] = { solutionId: selectedSolutionId, customInput }
+
     try {
       setLoading(true)
       const response = await submitAnswer(
@@ -76,17 +77,12 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
       setAnsweredCount(response.progress.answered)
 
       if (response.interview_completed) {
-        // Get enhanced spec and pass to format selection
         const specResponse = await getEnhancedSpec(sessionId)
         onSpecReady(specResponse.enhanced_spec)
         navigate('/format')
       } else if (response.next_question) {
         setCurrentIndex(currentIndex + 1)
-        // Pre-select recommended solution for next question
-        const recommended = response.next_question.solutions.find(s => s.recommended)
-        if (recommended) {
-          setSelectedSolutionId(recommended.id)
-        }
+        setSelectedSolutionId(null)
         setCustomInput('')
       }
 
@@ -112,10 +108,7 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
         navigate('/format')
       } else if (response.next_question) {
         setCurrentIndex(currentIndex + 1)
-        const recommended = response.next_question.solutions.find(s => s.recommended)
-        if (recommended) {
-          setSelectedSolutionId(recommended.id)
-        }
+        setSelectedSolutionId(null)
         setCustomInput('')
       }
 
@@ -148,12 +141,16 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
   const goBack = () => {
     if (currentIndex === 0) navigate('/')
     else {
+      const prevQ = questions[currentIndex - 1]
+      const saved = savedAnswers.current[prevQ.id]
       setCurrentIndex(currentIndex - 1)
-      setCustomInput('')
-      // Reset to previously selected or recommended
-      const recommended = questions[currentIndex - 1].solutions.find(s => s.recommended)
-      if (recommended) {
-        setSelectedSolutionId(recommended.id)
+      if (saved) {
+        setSelectedSolutionId(saved.solutionId)
+        setCustomInput(saved.customInput)
+      } else {
+        const recommended = prevQ.solutions.find(s => s.recommended)
+        setSelectedSolutionId(recommended?.id ?? null)
+        setCustomInput('')
       }
     }
   }
@@ -182,17 +179,7 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
 
   return (
     <div className={styles.page}>
-      <AppHeader
-        right={
-          <button
-            className={styles.skipAllBtn}
-            onClick={() => setShowSkipAllDialog(true)}
-            disabled={loading}
-          >
-            Skip entire interview →
-          </button>
-        }
-      />
+      <AppHeader />
 
       <FlowStepper current={1} />
 
@@ -238,34 +225,36 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
                 <p>{currentQuestion.context_from_spec}</p>
               </div>
 
-              {/* Solution options */}
-              <div className={styles.solutions}>
-                <label className={styles.solutionsLabel}>Select an approach:</label>
+              {/* Solution options — each card is a <label> wrapping its radio
+                  so clicking or tabbing to the label selects the option. */}
+              <div className={styles.solutions} role="radiogroup" aria-label="Select an approach">
+                <p className={styles.solutionsLabel} aria-hidden="true">Select an approach:</p>
                 {currentQuestion.solutions.map((solution) => (
-                  <div
+                  <label
                     key={solution.id}
+                    htmlFor={`sol-${solution.id}`}
                     className={`${styles.solutionCard} ${selectedSolutionId === solution.id ? styles.solutionCardSelected : ''}`}
-                    onClick={() => setSelectedSolutionId(solution.id)}
                   >
                     <div className={styles.solutionHeader}>
                       <input
                         type="radio"
+                        id={`sol-${solution.id}`}
                         name="solution"
                         value={solution.id}
                         checked={selectedSolutionId === solution.id}
                         onChange={() => setSelectedSolutionId(solution.id)}
                         className={styles.solutionRadio}
                       />
-                      <h4 className={styles.solutionTitle}>
+                      <span className={styles.solutionTitle}>
                         {solution.title}
                         {solution.recommended && (
-                          <span className={styles.recommendedBadge}>⭐ RECOMMENDED</span>
+                          <span className={styles.recommendedBadge}>suggested</span>
                         )}
-                      </h4>
+                      </span>
                     </div>
 
                     <p className={styles.solutionDescription}>{solution.description}</p>
-                  </div>
+                  </label>
                 ))}
               </div>
 
@@ -321,9 +310,18 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
               </button>
             </div>
 
-            <p className={styles.completedNote}>
-              {answeredCount} of {questions.length} answered
-            </p>
+            <div className={styles.footerRow}>
+              <p className={styles.completedNote}>
+                {answeredCount} of {questions.length} answered
+              </p>
+              <button
+                className={styles.skipAllLink}
+                onClick={() => setShowSkipAllDialog(true)}
+                disabled={loading}
+              >
+                Skip entire interview
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -378,30 +376,14 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
 // Analysis Loading Panel — shown while Claude generates questions
 // ---------------------------------------------------------------------------
 
-const ANALYSIS_STEPS = [
-  { icon: FileSearch,    label: 'Reading your specification',         ms: 0     },
-  { icon: BrainCircuit, label: 'Identifying architectural gaps',      ms: 3000  },
-  { icon: ListChecks,   label: 'Formulating critical questions',      ms: 8000  },
-  { icon: Lightbulb,    label: 'Generating solution options',         ms: 14000 },
-]
-
 function AnalysisLoadingPanel() {
-  const [activeStep, setActiveStep] = useState(0)
   const [elapsed, setElapsed] = useState(0)
 
   useEffect(() => {
     const start = Date.now()
-    const tick = setInterval(() => {
-      const ms = Date.now() - start
-      setElapsed(ms)
-      const next = [...ANALYSIS_STEPS].reverse().findIndex(s => s.ms <= ms)
-      const idx   = next === -1 ? 0 : ANALYSIS_STEPS.length - 1 - next
-      setActiveStep(idx)
-    }, 300)
+    const tick = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 500)
     return () => clearInterval(tick)
   }, [])
-
-  const slow = elapsed > 22000
 
   return (
     <div className={styles.analysisPage}>
@@ -412,44 +394,13 @@ function AnalysisLoadingPanel() {
           <h2 className={styles.analysisTitle}>Analysing your specification…</h2>
           <p className={styles.analysisSub}>
             Claude is reading your spec to surface the{' '}
-            <strong>6 most critical architectural decisions</strong> you need to make.
+            <strong>most critical architectural decisions</strong> you need to make.
           </p>
-
-          <div className={styles.analysisSteps}>
-            {ANALYSIS_STEPS.map((step, i) => {
-              const done   = i < activeStep
-              const active = i === activeStep
-              const Icon   = step.icon
-              return (
-                <div
-                  key={i}
-                  className={`${styles.analysisStep} ${done ? styles.stepDone : active ? styles.stepActive : styles.stepPending}`}
-                >
-                  <div className={styles.stepIconWrap}>
-                    {done
-                      ? <CheckCircle2 size={15} className={styles.stepCheckIcon} />
-                      : active
-                        ? <span className={styles.stepSpinner} />
-                        : <Icon size={15} className={styles.stepPendingIcon} />
-                    }
-                  </div>
-                  <span className={styles.stepLabel}>{step.label}</span>
-                  {active && <span className={styles.stepPulse} />}
-                </div>
-              )
-            })}
+          <div className={styles.analysisSpinnerRow}>
+            <span className={styles.stepSpinner} />
+            <span className={styles.analysisElapsed}>{elapsed}s</span>
           </div>
-
-          <div className={styles.analysisBarWrap}>
-            <div className={styles.analysisBarTrack}>
-              <div
-                className={styles.analysisBarFill}
-                style={{ width: `${Math.min(((activeStep + 1) / ANALYSIS_STEPS.length) * 100, 90)}%` }}
-              />
-            </div>
-          </div>
-
-          {slow ? (
+          {elapsed > 22 ? (
             <p className={styles.analysisSlow}>
               Taking a bit longer — Claude is being thorough with your spec.
             </p>

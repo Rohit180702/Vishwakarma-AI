@@ -25,6 +25,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import ELK from 'elkjs/lib/elk.bundled.js'
+import { toPng } from 'html-to-image'
 import mermaid from 'mermaid'
 import type { C4Boundary, C4Diagram, C4Node, C4NodeType, C4Relationship, DiagramLevel } from '@/types'
 import { queryDiagram } from '@/api/client'
@@ -205,21 +206,42 @@ function C4Edge({
     offset: 30,
   })
   const raw = typeof label === 'string' ? label : ''
-  const focusMode = !!(data as Record<string, unknown>)?.focusMode
-  const display = (!focusMode && raw.length > 32) ? raw.slice(0, 31) + '…' : raw
+  const d = (data ?? {}) as Record<string, unknown>
+  const focusMode = !!d.focusMode
+  const particle = !!d.particle
+  const particleColor = (style?.stroke as string) || '#3B82F6'
 
   return (
     <>
       <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />
-      {display && (
+      {particle && (
+        <g>
+          {[0, 1].map(i => (
+            <circle key={i} r={4} fill={particleColor} opacity={0.95}>
+              <animateMotion dur="1.6s" begin={`${i * 0.8}s`} repeatCount="indefinite" path={path} />
+            </circle>
+          ))}
+        </g>
+      )}
+      {raw && (
         <EdgeLabelRenderer>
-          <div
-            className={`${styles.edgeLabel} ${focusMode ? styles.edgeLabelFocused : ''}`}
-            title={raw}
-            style={{ transform: `translate(-50%,-50%) translate(${lx}px,${ly}px)` }}
-          >
-            {display}
-          </div>
+          {focusMode ? (
+            <div
+              className={`${styles.edgeLabel} ${styles.edgeLabelFocused}`}
+              style={{ transform: `translate(-50%,-50%) translate(${lx}px,${ly}px)` }}
+            >
+              {raw}
+            </div>
+          ) : (
+            /* Idle: tiny dot — full label expands on hover, keeping canvas clean */
+            <div
+              className={styles.edgeDot}
+              style={{ transform: `translate(-50%,-50%) translate(${lx}px,${ly}px)` }}
+            >
+              <span className={styles.edgeDotMark} />
+              <span className={styles.edgeDotLabel}>{raw}</span>
+            </div>
+          )}
         </EdgeLabelRenderer>
       )}
     </>
@@ -244,11 +266,15 @@ const elk = new ELK()
 const ELK_OPTIONS = {
   'elk.algorithm': 'layered',
   'elk.direction': 'RIGHT',
-  // Moderate spacing — enough breathing room without sprawl
-  'elk.layered.spacing.nodeNodeBetweenLayers': '140',
-  'elk.spacing.nodeNode': '60',
+  // Generous spacing so edges and (hover-revealed) labels never collide with nodes
+  'elk.layered.spacing.nodeNodeBetweenLayers': '180',
+  'elk.spacing.nodeNode': '80',
+  'elk.layered.spacing.edgeNodeBetweenLayers': '40',
+  'elk.spacing.edgeNode': '32',
+  'elk.spacing.edgeEdge': '24',
   'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-  'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+  // NETWORK_SIMPLEX produces straighter, more balanced rows than BRANDES_KOEPF
+  'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
   // Break cycles without reversing model-defined directions
   'elk.layered.cycleBreaking.strategy': 'MODEL_ORDER',
   // ORTHOGONAL edge routing keeps edges rectilinear and easy to follow.
@@ -372,24 +398,43 @@ async function buildFlow(
 // ---------------------------------------------------------------------------
 function FlowController({
   flowIds,
+  focusNodeId,
 }: {
   flowIds: Set<string> | null
+  /** In walkthrough mode: camera glides to this node on every step */
+  focusNodeId?: string | null
 }) {
   const { fitView } = useReactFlow()
 
-  // Only fit-to-view when the flow selection first appears (flowIds changes from null).
-  // We do NOT zoom on every step change — the highlight is the visual cue.
+  // Fit the whole flow when a selection first appears (click/BFS mode).
   const prevRef = useRef<Set<string> | null>(null)
   useEffect(() => {
     const wasNull = prevRef.current === null
     prevRef.current = flowIds
     if (!flowIds || !wasNull) return   // only fire on null → set transition
+    if (focusNodeId) return            // walkthrough zoom takes over below
     const nodeIds = [...flowIds].map(id => ({ id }))
     const t = setTimeout(() => {
       fitView({ nodes: nodeIds, padding: 0.22, duration: 520, minZoom: 0.15, maxZoom: 2 })
     }, 60)
     return () => clearTimeout(t)
-  }, [flowIds, fitView])
+  }, [flowIds, focusNodeId, fitView])
+
+  // Walkthrough: cinematic pan+zoom to the current step's node.
+  // Generous padding keeps neighbours visible so the audience never loses context.
+  useEffect(() => {
+    if (!focusNodeId) return
+    const t = setTimeout(() => {
+      fitView({
+        nodes: [{ id: focusNodeId }],
+        padding: 1.8,
+        duration: 650,
+        minZoom: 0.3,
+        maxZoom: 1.05,
+      })
+    }, 80)
+    return () => clearTimeout(t)
+  }, [focusNodeId, fitView])
 
   return null
 }
@@ -542,18 +587,32 @@ function computeFlowIds(
 // ---------------------------------------------------------------------------
 // Interactive React Flow canvas
 // ---------------------------------------------------------------------------
+// Domain-neutral examples — work for any generated architecture
+const QUERY_EXAMPLES = [
+  'How does a user request flow through the system?',
+  'What happens when something fails?',
+  'Which services touch the data store?',
+  'Walk me through the main user journey',
+  'How does data move between services?',
+]
+
 function RFCanvas({
   nodes: initNodes,
   edges: initEdges,
   c4nodes,
   c4rels,
   diagram,
+  drillTarget,
+  onDrillDown,
 }: {
   nodes: Node[]
   edges: Edge[]
   c4nodes: C4Node[]
   c4rels: C4Relationship[]
   diagram: C4Diagram
+  /** Label of the next C4 level down, if one exists (e.g. "L3 · Component") */
+  drillTarget?: string | null
+  onDrillDown?: () => void
 }) {
   const [nodes, , onNodesChange] = useNodesState(initNodes)
   const baseEdges = useMemo(() => initEdges, [initEdges])
@@ -563,6 +622,13 @@ function RFCanvas({
 
   // Conversational step-through query state
   const [queryText, setQueryText] = useState('')
+  const [placeholderIdx, setPlaceholderIdx] = useState(0)
+
+  // Rotate example questions so the audience discovers the conversational canvas
+  useEffect(() => {
+    const t = setInterval(() => setPlaceholderIdx(i => (i + 1) % QUERY_EXAMPLES.length), 4000)
+    return () => clearInterval(t)
+  }, [])
   const [queryLoading, setQueryLoading] = useState(false)
   const [querySteps, setQuerySteps] = useState<{ node_id: string; explanation: string }[] | null>(null)
   const [stepIndex, setStepIndex] = useState(0)
@@ -667,6 +733,12 @@ function RFCanvas({
     [querySteps, stepIndex],
   )
 
+  // The edge being traversed right now (previous step → current step) — gets a particle
+  const stepEdgeKey = useMemo(() => {
+    if (!querySteps || stepIndex === 0) return null
+    return { from: querySteps[stepIndex - 1].node_id, to: querySteps[stepIndex].node_id }
+  }, [querySteps, stepIndex])
+
   // Click selection falls back to full BFS traversal when no query active
   const flowIds = useMemo(() => {
     if (allStepIds) return allStepIds
@@ -743,12 +815,18 @@ function RFCanvas({
       const highlightColor = sourceNode ? (NODE_STYLES[sourceNode.type]?.border ?? '#3B82F6') : '#3B82F6'
       const edgeData = (e.data as Record<string, unknown>) ?? {}
       const isAsync = !!(edgeData.isAsync)
+      // Particles: walkthrough mode → only the edge being traversed this step;
+      // click mode → edges directly touching the selected node
+      const particle = stepEdgeKey
+        ? (e.source === stepEdgeKey.from && e.target === stepEdgeKey.to) ||
+          (e.source === stepEdgeKey.to && e.target === stepEdgeKey.from)
+        : isDirect
       return {
         ...e,
         // Animate highlighted edges to show data flow direction;
         // async edges keep their dash pattern on top of the animation
         animated: inFlow,
-        data: { ...edgeData, focusMode: inFlow },
+        data: { ...edgeData, focusMode: inFlow, particle: inFlow && particle },
         style: {
           ...e.style,
           opacity: inFlow ? 1 : 0.07,
@@ -764,7 +842,49 @@ function RFCanvas({
         } as Edge['markerEnd'],
       }
     })
-  }, [baseEdges, flowIds, selectedId, c4nodes])
+  }, [baseEdges, flowIds, selectedId, c4nodes, stepEdgeKey])
+
+  // Export the laid-out diagram as a hi-res PNG by re-transforming the viewport
+  const exportPng = useCallback(async () => {
+    const viewport = containerRef.current?.querySelector('.react-flow__viewport') as HTMLElement | null
+    if (!viewport) return
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const n of nodes) {
+      const w = typeof n.style?.width === 'number' ? n.style.width : NODE_W
+      const h = typeof n.style?.height === 'number' ? n.style.height : NODE_H
+      minX = Math.min(minX, n.position.x)
+      minY = Math.min(minY, n.position.y)
+      maxX = Math.max(maxX, n.position.x + w)
+      maxY = Math.max(maxY, n.position.y + h)
+    }
+    if (minX === Infinity) return
+    const pad = 48
+    const w = Math.round(maxX - minX + pad * 2)
+    const h = Math.round(maxY - minY + pad * 2)
+    try {
+      const dataUrl = await toPng(viewport, {
+        backgroundColor: '#F4F7FC',
+        width: w,
+        height: h,
+        pixelRatio: 2,
+        // Google Fonts stylesheet is cross-origin; embedding throws SecurityError.
+        // System font fallback is visually near-identical for Inter.
+        skipFonts: true,
+        fontEmbedCSS: '',
+        style: {
+          width: `${w}px`,
+          height: `${h}px`,
+          transform: `translate(${-minX + pad}px, ${-minY + pad}px) scale(1)`,
+        },
+      })
+      const a = document.createElement('a')
+      a.download = `${(diagram.title || diagram.level).replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-c4.png`
+      a.href = dataUrl
+      a.click()
+    } catch (e) {
+      console.warn('PNG export failed:', e)
+    }
+  }, [nodes, diagram])
 
   const toggleFullscreen = useCallback(() => {
     if (!containerRef.current) return
@@ -808,12 +928,8 @@ function RFCanvas({
               </div>
             )}
             <div className={styles.stepInfo}>
-              <span className={styles.stepCount}>{stepIndex + 1} / {querySteps.length}</span>
-              <span className={styles.stepBadge} style={{ background: currentStepStyle.headerBg, color: '#fff' }}>
-                {currentStepStyle.badge}
-              </span>
-              <span className={styles.stepNodeName}>{currentStepNode.label}</span>
-              <span className={styles.stepExplanation}>{querySteps[stepIndex].explanation}</span>
+              <span className={styles.stepCount}>Walkthrough · {stepIndex + 1} / {querySteps.length}</span>
+              <span className={styles.stepQueryEcho}>"{queryText}"</span>
             </div>
             <div className={styles.rfToolbarActions}>
               <button
@@ -871,10 +987,11 @@ function RFCanvas({
           /* Idle — query input lives here */
           <>
             <div className={styles.toolbarQuery}>
+              <span className={styles.querySpark} aria-hidden="true">✦</span>
               <input
                 className={styles.toolbarQueryInput}
                 type="text"
-                placeholder={`Ask about a flow… e.g. "How does ticket booking happen?"`}
+                placeholder={`Ask the architecture… "${QUERY_EXAMPLES[placeholderIdx]}"`}
                 value={queryText}
                 onChange={e => setQueryText(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleQuery()}
@@ -890,6 +1007,12 @@ function RFCanvas({
               </button>
             </div>
             <div className={styles.rfToolbarActions}>
+              {drillTarget && (
+                <span className={styles.drillHint}>Double-click a node → {drillTarget}</span>
+              )}
+              <button className={styles.actionBtn} onClick={exportPng} title="Download as PNG">
+                ↓ PNG
+              </button>
               <button className={`${styles.actionBtn} ${styles.actionBtnPrimary}`} onClick={toggleFullscreen}>
                 {isFullscreen ? '✕ Exit' : '⛶ Present'}
               </button>
@@ -910,6 +1033,10 @@ function RFCanvas({
             if (node.type !== 'c4node') return
             setSelectedId(prev => prev === node.id ? null : node.id)
           }}
+          onNodeDoubleClick={(_, node) => {
+            if (node.type !== 'c4node' || !onDrillDown) return
+            onDrillDown()
+          }}
           onPaneClick={() => setSelectedId(null)}
           fitView
           fitViewOptions={{ padding: 0.18 }}
@@ -923,15 +1050,46 @@ function RFCanvas({
             markerEnd: { type: 'arrowclosed', width: 14, height: 14, color: '#94A3B8' },
           }}
         >
-          <FlowController flowIds={flowIds} />
+          <FlowController flowIds={flowIds} focusNodeId={currentStepNodeId} />
           <Background color="#BFCFE8" gap={24} size={1.2} />
           <Controls showInteractive={false} />
-          <MiniMap
-            nodeColor={n => NODE_STYLES[(n.data as C4NodeData)?.nodeType]?.minimap ?? '#8A9AB0'}
-            maskColor="rgba(248,250,252,0.85)"
-            style={{ border: '1px solid #E2E8F0', borderRadius: 6 }}
-          />
+          {/* Hidden during walkthrough so it never collides with the caption card */}
+          {!querySteps && (
+            <MiniMap
+              position="top-right"
+              nodeColor={n => NODE_STYLES[(n.data as C4NodeData)?.nodeType]?.minimap ?? '#8A9AB0'}
+              maskColor="rgba(248,250,252,0.85)"
+              pannable
+              zoomable
+              style={{ width: 150, height: 100, border: '1px solid #E2E8F0', borderRadius: 8, opacity: 0.9 }}
+            />
+          )}
         </ReactFlow>
+
+        {/* Cinematic subtitle card — film-caption style, bottom-center */}
+        {querySteps && currentStepNode && currentStepStyle && (
+          <div className={styles.captionCard} key={stepIndex}>
+            <div className={styles.captionTop}>
+              <span className={styles.captionStep} style={{ background: currentStepStyle.headerBg }}>
+                {stepIndex + 1}
+              </span>
+              <span className={styles.captionBadge} style={{ color: currentStepStyle.headerBg }}>
+                {currentStepStyle.badge}
+              </span>
+              <span className={styles.captionNode}>{currentStepNode.label}</span>
+            </div>
+            <p className={styles.captionText}>{querySteps[stepIndex].explanation}</p>
+            <div className={styles.captionDots}>
+              {querySteps.map((_, i) => (
+                <span
+                  key={i}
+                  className={`${styles.captionDot} ${i === stepIndex ? styles.captionDotActive : ''} ${i < stepIndex ? styles.captionDotDone : ''}`}
+                  style={i === stepIndex ? { background: currentStepStyle.headerBg } : undefined}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Legend */}
@@ -1029,7 +1187,15 @@ function MermaidSVG({ syntax }: { syntax: string }) {
 // ---------------------------------------------------------------------------
 // Single diagram view — async ELK layout with loading state
 // ---------------------------------------------------------------------------
-function DiagramView({ diagram }: { diagram: C4Diagram }) {
+function DiagramView({
+  diagram,
+  drillTarget,
+  onDrillDown,
+}: {
+  diagram: C4Diagram
+  drillTarget?: string | null
+  onDrillDown?: () => void
+}) {
   const [flow, setFlow] = useState<FlowResult | null>(null)
 
   useEffect(() => {
@@ -1070,6 +1236,8 @@ function DiagramView({ diagram }: { diagram: C4Diagram }) {
       c4nodes={diagram.nodes}
       c4rels={diagram.relationships ?? []}
       diagram={diagram}
+      drillTarget={drillTarget}
+      onDrillDown={onDrillDown}
     />
   )
 }
@@ -1093,10 +1261,21 @@ const LEVEL_TOOLTIPS: Record<DiagramLevel, string> = {
   deployment: 'Infrastructure topology — nodes, zones, and deployed containers',
 }
 
+// C4 drill order: context → container → component
+const DRILL_ORDER: DiagramLevel[] = ['context', 'container', 'component']
+
 export function DiagramPanel({ diagrams }: { diagrams: C4Diagram[] }) {
   const levels = useMemo(() => diagrams.map(d => d.level), [diagrams])
   const [active, setActive] = useState<DiagramLevel>(levels[0] ?? 'context')
   const activeDiagram = diagrams.find(d => d.level === active)
+
+  // Next level down (if it exists) — enables double-click drill-down
+  const drillLevel = useMemo(() => {
+    const i = DRILL_ORDER.indexOf(active)
+    if (i === -1 || i === DRILL_ORDER.length - 1) return null
+    const next = DRILL_ORDER[i + 1]
+    return levels.includes(next) ? next : null
+  }, [active, levels])
 
   if (diagrams.length === 0) {
     return <div className={styles.empty}><p>No diagram data available.</p></div>
@@ -1122,7 +1301,14 @@ export function DiagramPanel({ diagrams }: { diagrams: C4Diagram[] }) {
       )}
 
       {activeDiagram
-        ? <DiagramView key={active} diagram={activeDiagram} />
+        ? (
+          <DiagramView
+            key={active}
+            diagram={activeDiagram}
+            drillTarget={drillLevel ? LEVEL_LABELS[drillLevel] : null}
+            onDrillDown={drillLevel ? () => setActive(drillLevel) : undefined}
+          />
+        )
         : <div className={styles.empty}><p>No diagram for this level.</p></div>
       }
     </div>

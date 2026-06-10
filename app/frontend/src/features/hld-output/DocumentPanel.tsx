@@ -111,6 +111,8 @@ export function DocumentPanel({ hld, onSectionEdit, scrollToKey, onScrolled }: D
     setEditingKey(null)
   }
 
+  const cancelEdit = () => setEditingKey(null)
+
   const setRef = useCallback((key: string) => (el: HTMLDivElement | null) => {
     sectionRefs.current[key] = el
   }, [])
@@ -167,16 +169,32 @@ export function DocumentPanel({ hld, onSectionEdit, scrollToKey, onScrolled }: D
             {!isCollapsed && (
               <div className={styles.sectionBody}>
                 <div className={styles.sectionActions}>
-                  <button
-                    className={styles.editBtn}
-                    onClick={e => {
-                      e.stopPropagation()
-                      isEditing ? saveEdit(section.key) : startEdit(section)
-                    }}
-                    aria-label={isEditing ? 'Save section' : 'Edit section'}
-                  >
-                    {isEditing ? 'Save' : 'Edit'}
-                  </button>
+                  {isEditing ? (
+                    <>
+                      <button
+                        className={styles.cancelBtn}
+                        onClick={e => { e.stopPropagation(); cancelEdit() }}
+                        aria-label="Cancel edit"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className={styles.editBtn}
+                        onClick={e => { e.stopPropagation(); saveEdit(section.key) }}
+                        aria-label="Save section"
+                      >
+                        Save
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className={styles.editBtn}
+                      onClick={e => { e.stopPropagation(); startEdit(section) }}
+                      aria-label="Edit section"
+                    >
+                      Edit
+                    </button>
+                  )}
                 </div>
 
                 {isEditing ? (
@@ -184,6 +202,7 @@ export function DocumentPanel({ hld, onSectionEdit, scrollToKey, onScrolled }: D
                     className={styles.editArea}
                     value={draftContent}
                     onChange={e => setDraftContent(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); cancelEdit() } }}
                     rows={Math.max(6, draftContent.split('\n').length + 2)}
                     aria-label={`Edit section ${section.title}`}
                   />

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { UploadCloud, FileText, AlertCircle, Clock, Trash2, ArrowRight, X, Lock } from 'lucide-react'
+import { UploadCloud, FileText, AlertCircle, Clock, Trash2, ArrowRight, X, Lock, GitBranch, BookMarked, Sparkles } from 'lucide-react'
 import { FlowStepper } from '@/components/FlowStepper/FlowStepper'
 import { AppHeader } from '@/components/AppHeader'
 import { listSessions, loadSession, deleteSession, uploadSpecFiles } from '@/api/client'
+import { useToast } from '@/components/Toast/ToastContext'
 import type { SessionSummary, SessionDetail } from '@/api/client'
 import type { HLDDocument, HLDTemplate } from '@/types'
 import { SessionPreviewDrawer, sessionResumeStage } from './SessionPreviewDrawer'
@@ -28,6 +29,8 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [drawerDetail, setDrawerDetail] = useState<SessionDetail | null>(null)
   const [drawerLoading, setDrawerLoading] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const { showToast } = useToast()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -42,6 +45,7 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
       setDrawerDetail(detail)
     } catch (e) {
       console.error('Failed to load session', e)
+      showToast('Failed to load session. Please try again.', 'error')
       setDrawerLoading(false)
     } finally {
       setDrawerLoading(false)
@@ -68,6 +72,11 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
 
   const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
+    if (deletingId !== id) {
+      setDeletingId(id)
+      return
+    }
+    setDeletingId(null)
     await deleteSession(id)
     setSessions((prev: SessionSummary[]) => prev.filter((s: SessionSummary) => s.id !== id))
     if (drawerDetail?.id === id) setDrawerDetail(null)
@@ -77,26 +86,26 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
     if (!files) return
 
     const fileArray = Array.from(files)
-    const validFiles = fileArray.filter(file => {
-      const ext = file.name.split('.').pop()?.toLowerCase()
-      return ext && ['md', 'txt', 'docx', 'pdf'].includes(ext)
-    })
+    const VALID_EXTS = ['md', 'txt', 'docx', 'pdf']
+    const validFiles   = fileArray.filter(f => VALID_EXTS.includes(f.name.split('.').pop()?.toLowerCase() ?? ''))
+    const invalidFiles = fileArray.filter(f => !VALID_EXTS.includes(f.name.split('.').pop()?.toLowerCase() ?? ''))
 
-    if (validFiles.length === 0) {
-      setErrorMsg('Please upload valid files (.md, .txt, .docx, .pdf)')
-      setState('error')
-      return
+    if (invalidFiles.length > 0) {
+      const names = invalidFiles.map(f => f.name).join(', ')
+      const plural = invalidFiles.length > 1 ? 's' : ''
+      if (validFiles.length === 0) {
+        setErrorMsg(`Unsupported file${plural}: ${names}. Accepted: .md, .txt, .docx, .pdf`)
+        setState('error')
+        return
+      }
+      showToast(`Skipped unsupported file${plural}: ${names}`, 'info')
     }
 
-    const newFiles = validFiles.map(file => ({
-      file,
-      id: crypto.randomUUID(),
-    }))
-
+    const newFiles = validFiles.map(file => ({ file, id: crypto.randomUUID() }))
     setSelectedFiles(prev => [...prev, ...newFiles])
     setState('idle')
     setErrorMsg('')
-  }, [])
+  }, [showToast])
 
   const removeFile = (id: string) => {
     setSelectedFiles(prev => prev.filter(f => f.id !== id))
@@ -112,11 +121,13 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
 
       onReady(response.unified_spec_text, response.session_id)
       setState('idle')
-      setTimeout(() => navigate('/interview'), 800)
+      navigate('/interview')
     } catch (error) {
       console.error('Upload failed:', error)
-      setErrorMsg('Failed to upload and parse documents. Please try again.')
+      const msg = 'Failed to upload and parse documents. Please try again.'
+      setErrorMsg(msg)
       setState('error')
+      showToast(msg, 'error')
     }
   }, [selectedFiles, onReady, navigate])
 
@@ -137,11 +148,20 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
 
       <main className={styles.main}>
         <div className={styles.hero}>
-          <h1 className={styles.title}>Turn your spec into architecture</h1>
+          <span className={styles.eyebrow}>
+            <Sparkles size={12} /> AI Architecture Copilot
+          </span>
+          <h1 className={styles.title}>
+            Turn your spec into <span className={styles.titleAccent}>architecture</span>
+          </h1>
           <p className={styles.subtitle}>
-            Upload a specification document and we'll generate a full High-Level Design with
-            C4 diagrams, ADRs, and an architecture chat sidekick.
+            Drop in a specification — get a complete High-Level Design in minutes.
           </p>
+          <div className={styles.featureRow}>
+            <span className={styles.featureChip}><GitBranch size={13} /> Interactive C4 diagrams</span>
+            <span className={styles.featureChip}><BookMarked size={13} /> Decision records</span>
+            <span className={styles.featureChip}><Sparkles size={13} /> Conversational walkthroughs</span>
+          </div>
         </div>
 
         {state === 'error' && (
@@ -227,11 +247,15 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
             </div>
             <div className={styles.sessionsList}>
               {sessions.map(s => (
-                <button
+                <div
                   key={s.id}
+                  role="button"
+                  tabIndex={0}
                   className={`${styles.sessionItem} ${drawerDetail?.id === s.id ? styles.sessionItemActive : ''}`}
                   onClick={() => handleSessionClick(s.id)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSessionClick(s.id) } }}
                   title="Preview this session"
+                  onMouseLeave={() => setDeletingId(null)}
                 >
                   <FileText size={14} className={styles.sessionFileIcon} />
                   <span className={styles.sessionName}>{s.project_name}</span>
@@ -244,14 +268,24 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
                     </span>
                   </span>
                   <ArrowRight size={13} className={styles.sessionArrow} />
-                  <button
-                    className={styles.sessionDelete}
-                    onClick={e => handleDeleteSession(e, s.id)}
-                    title="Delete session"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </button>
+                  {deletingId === s.id ? (
+                    <span
+                      className={styles.sessionDeleteConfirm}
+                      onClick={e => handleDeleteSession(e, s.id)}
+                      title="Click again to confirm deletion"
+                    >
+                      Delete?
+                    </span>
+                  ) : (
+                    <button
+                      className={styles.sessionDelete}
+                      onClick={e => handleDeleteSession(e, s.id)}
+                      title="Delete session"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           </div>

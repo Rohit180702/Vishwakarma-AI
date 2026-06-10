@@ -440,37 +440,39 @@
   gap: 8px;
   flex: 1;
   min-width: 0;
-  background: #EFF6FF;
-  border: 1.5px solid #BFDBFE;
-  border-radius: 9px;
-  padding: 4px 6px 4px 12px;
+  max-width: 560px;
+  background: #FFFFFF;
+  border: 1.5px solid #C7D2FE;
+  border-radius: 100px;
+  padding: 5px 6px 5px 14px;
+  box-shadow: 0 1px 3px rgba(99,102,241,0.10), 0 0 0 4px rgba(99,102,241,0.05);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .toolbarQuery:focus-within {
-  border-color: #3B82F6;
-  box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+  border-color: #6366F1;
+  box-shadow: 0 0 0 4px rgba(99,102,241,0.16), 0 2px 8px rgba(99,102,241,0.18);
 }
 .toolbarQueryInput {
   flex: 1;
   min-width: 0;
   padding: 3px 0;
-  font-size: 12px;
+  font-size: 12.5px;
   font-family: var(--font-ui);
   color: #1E293B;
   background: transparent;
   border: none;
   outline: none;
 }
-.toolbarQueryInput::placeholder { color: #93C5FD; }
+.toolbarQueryInput::placeholder { color: #94A3B8; transition: opacity 0.3s; }
 .toolbarQueryInput:disabled { opacity: 0.6; cursor: not-allowed; }
 .toolbarQueryBtn {
   padding: 5px 14px;
   font-size: 12px;
   font-weight: 700;
   color: #fff;
-  background: #1D55C8;
+  background: #6366F1;
   border: none;
-  border-radius: 6px;
+  border-radius: 100px;
   cursor: pointer;
   transition: background 0.15s, opacity 0.15s;
   flex-shrink: 0;
@@ -481,7 +483,7 @@
   height: 26px;
   letter-spacing: 0.3px;
 }
-.toolbarQueryBtn:hover:not(:disabled) { background: #1746A8; }
+.toolbarQueryBtn:hover:not(:disabled) { background: #4F46E5; }
 .toolbarQueryBtn:disabled { opacity: 0.45; cursor: not-allowed; }
 .queryBtnLoading { background: #6B9BE8 !important; }
 .querySpinner {
@@ -588,6 +590,164 @@
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* ── Idle edge dot — declutters the canvas; label on hover ── */
+.edgeDot {
+  position: absolute;
+  pointer-events: all;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;            /* generous hover target */
+  cursor: default;
+  z-index: 1;
+}
+.edgeDotMark {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 1.5px solid #94A3B8;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.edgeDotLabel {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #FFFFFF;
+  border: 1px solid #94A3B8;
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 10.5px;
+  font-family: var(--font-ui);
+  color: #1E293B;
+  font-weight: 500;
+  white-space: nowrap;
+  max-width: 320px;
+  box-shadow: 0 4px 12px rgba(15,23,42,0.12);
+}
+.edgeDot:hover { z-index: 30; }
+.edgeDot:hover .edgeDotMark { transform: scale(1.3); border-color: #3B82F6; }
+.edgeDot:hover .edgeDotLabel { display: block; }
+
+/* ── Cinematic walkthrough caption (film-subtitle style) ──── */
+.captionCard {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  width: min(620px, calc(100% - 48px));
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(8px);
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 14px 20px 12px;
+  box-shadow: 0 12px 32px -8px rgba(15, 23, 42, 0.22);
+  animation: captionIn 0.35s ease;
+  pointer-events: none;
+}
+@keyframes captionIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.captionTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.captionStep {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  font-family: var(--font-ui);
+  flex-shrink: 0;
+}
+.captionBadge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  font-family: var(--font-ui);
+  flex-shrink: 0;
+}
+.captionNode {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0F172A;
+  font-family: var(--font-ui);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.captionText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #334155;
+  font-family: var(--font-ui);
+}
+.captionDots {
+  display: flex;
+  gap: 5px;
+  margin-top: 10px;
+}
+.captionDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #E2E8F0;
+  transition: background 0.2s, transform 0.2s;
+}
+.captionDotActive { transform: scale(1.35); }
+.captionDotDone { background: #94A3B8; }
+
+/* Walkthrough toolbar — echo of the asked question */
+.stepQueryEcho {
+  font-size: 11.5px;
+  color: #64748B;
+  font-family: var(--font-ui);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Hero query spark icon */
+.querySpark {
+  color: #6366F1;
+  font-size: 13px;
+  flex-shrink: 0;
+  animation: sparkPulse 2.4s ease-in-out infinite;
+}
+@keyframes sparkPulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 1; transform: scale(1.18); }
+}
+
+/* Drill-down hint chip */
+.drillHint {
+  font-size: 10.5px;
+  font-family: var(--font-ui);
+  color: #6D28D9;
+  background: #F5F3FF;
+  border: 1px solid #DDD6FE;
+  padding: 3px 9px;
+  border-radius: 100px;
+  white-space: nowrap;
+  font-weight: 600;
 }
 
 /* ── Empty state ─────────────────────────────────────────── */

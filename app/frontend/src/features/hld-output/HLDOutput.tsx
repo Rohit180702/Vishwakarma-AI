@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { jsonrepair } from 'jsonrepair'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, FileText, GitBranch, BookMarked, Download, ShieldCheck, Check } from 'lucide-react'
+import { ChevronLeft, FileText, GitBranch, BookMarked, Download, Check, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { AlertTriangle } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { streamHLD, saveSession, ApiError } from '@/api/client'
+import { useToast } from '@/components/Toast/ToastContext'
 import type { HLDDocument, HLDEditCommand, HLDTemplate, Section } from '@/types'
 import { TEMPLATE_OPTIONS } from '@/types'
 import { ChatPanel } from './ChatPanel'
@@ -32,9 +33,25 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
   const [rawTokens, setRawTokens] = useState('')
   const [hld, setHld] = useState<HLDDocument | null>(preloadedHld ?? null)
   const [errorMsg, setErrorMsg] = useState('')
-  const [activeTab, setActiveTab] = useState<Tab>('document')
+  const tabKey = `vk_tab_${sessionId ?? 'default'}`
+  const [activeTab, setActiveTab] = useState<Tab>(
+    () => (sessionStorage.getItem(tabKey) as Tab) ?? 'document'
+  )
+  const setTab = (tab: Tab) => { setActiveTab(tab); sessionStorage.setItem(tabKey, tab) }
   const [editedSectionKey, setEditedSectionKey] = useState<string | null>(null)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [chatOpen, setChatOpen] = useState(() => window.innerWidth > 1100)
+  const { showToast } = useToast()
+
+  // Keep sidebar state in sync with viewport resize
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1100px)')
+    const handler = (e: MediaQueryListEvent) => setChatOpen(!e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
   const abortRef = useRef<AbortController | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const navigate = useNavigate()
 
   const generate = useCallback(async () => {
@@ -44,6 +61,7 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
     abortRef.current = new AbortController()
 
     let accumulated = ''
+    let lastRenderMs = 0
 
     try {
       await streamHLD(
@@ -51,9 +69,17 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
         template,
         (token) => {
           accumulated += token
-          setRawTokens(accumulated)
+          // Throttle React re-renders to ≤ ~10/sec so extractLiveData's full-string
+          // regexes don't turn O(n²) on a large token stream.
+          const now = Date.now()
+          if (now - lastRenderMs >= 100) {
+            lastRenderMs = now
+            setRawTokens(accumulated)
+          }
         },
         (cleanedJson) => {
+          // Flush any throttled tokens so the progress panel shows 100% briefly
+          setRawTokens(accumulated)
           try {
             const jsonToParse = cleanedJson || extractJson(accumulated)
             const doc: HLDDocument = JSON.parse(jsonToParse)
@@ -65,20 +91,23 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
           } catch (e) {
             console.error('Parse failed:', e)
             console.error('Cleaned JSON (last 500 chars):', (cleanedJson || accumulated).slice(-500))
-            setErrorMsg('Generated output was malformed. Please try again.')
+            const msg = 'Generated output was malformed. Please try again.'
+            setErrorMsg(msg)
             setGenState('error')
+            showToast(msg, 'error')
           }
         },
         abortRef.current.signal,
-        // Send only section names to the backend; hints are UI-only for now
         customSections?.map(s => s.name),
         customTemplateText,
         thoughtworksMode,
       )
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return
-      setErrorMsg(err instanceof ApiError ? err.detail : 'Generation failed')
+      const msg = err instanceof ApiError ? err.detail : 'Generation failed'
+      setErrorMsg(msg)
       setGenState('error')
+      showToast(msg, 'error')
     }
   }, [specText, template, customSections, customTemplateText, thoughtworksMode])
 
@@ -87,12 +116,66 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
     return () => { abortRef.current?.abort() }
   }, [generate])
 
+  const handleExport = useCallback(() => {
+    if (!hld) return
+    const lines: string[] = [`# ${hld.project_name}\n`]
+    for (const s of hld.sections) {
+      lines.push(`## ${s.number ? `${s.number}. ` : ''}${s.title}\n`)
+      lines.push(s.content)
+      lines.push('')
+    }
+    if (hld.adrs.length > 0) {
+      lines.push('---\n## Architecture Decision Records\n')
+      for (const adr of hld.adrs) {
+        lines.push(`### ${adr.id}: ${adr.title}\n`)
+        lines.push(`**Status:** ${adr.status}  \n**Context:** ${adr.context}\n`)
+        lines.push(`**Decision:** ${adr.decision}\n`)
+        if (adr.alternatives?.length > 0) {
+          lines.push('**Alternatives considered:**')
+          for (const alt of adr.alternatives) {
+            lines.push(`- **${alt.option}**`)
+            if (alt.pros.length) lines.push(`  - Pros: ${alt.pros.join(', ')}`)
+            if (alt.cons.length) lines.push(`  - Cons: ${alt.cons.join(', ')}`)
+          }
+          lines.push('')
+        }
+        if (adr.consequences_positive.length)
+          lines.push(`**Positive consequences:**\n${adr.consequences_positive.map(c => `- ${c}`).join('\n')}\n`)
+        if (adr.consequences_negative.length)
+          lines.push(`**Negative consequences:**\n${adr.consequences_negative.map(c => `- ${c}`).join('\n')}\n`)
+      }
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${hld.project_name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_hld.md`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [hld])
+
   const handleSectionEdit = (key: string, content: string) => {
     if (!hld) return
-    setHld({
+    const updated = {
       ...hld,
       sections: hld.sections.map(s => s.key === key ? { ...s, content } : s),
-    })
+    }
+    setHld(updated)
+    setSaveStatus('idle')
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(async () => {
+      setSaveStatus('saving')
+      try {
+        await saveSession(updated.project_name, template, specText, JSON.stringify(updated), sessionId)
+        setSaveStatus('saved')
+        setTimeout(() => setSaveStatus('idle'), 2000)
+      } catch {
+        setSaveStatus('idle')
+      }
+    }, 1500)
   }
 
   const handleChatEdit = useCallback((cmd: HLDEditCommand) => {
@@ -159,32 +242,49 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
 
   return (
     <div className={styles.shell}>
-      {/* Left — chat */}
-      <aside className={styles.chatCol} aria-label="Architecture sidekick">
-        <ChatPanel hld={hld} onEdit={handleChatEdit} />
+      {/* Left — chat (collapsible) */}
+      <aside className={`${styles.chatCol} ${!chatOpen ? styles.chatColCollapsed : ''}`} aria-label="Architecture sidekick">
+        {chatOpen && <ChatPanel hld={hld} sessionId={sessionId} onEdit={handleChatEdit} />}
       </aside>
 
       {/* Main — tabs + content */}
       <div className={styles.mainCol}>
         <header className={styles.mainHeader}>
-          {/* Left: breadcrumb back */}
-          <button className={styles.backBtn} onClick={() => navigate('/format')}>
-            <ChevronLeft size={14} /> <span className={styles.backLabel}>Vishwakarma</span>
-            <span className={styles.backSep}>/</span>
-            <span className={styles.backCurrent}>{hld.project_name}</span>
-          </button>
+          {/* Left: sidebar toggle + breadcrumb */}
+          <div className={styles.headerLeft}>
+            <button
+              className={styles.sidebarToggle}
+              onClick={() => setChatOpen(o => !o)}
+              title={chatOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+              aria-label={chatOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            >
+              {chatOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+            </button>
+            <button className={styles.backBtn} onClick={() => navigate('/format')}>
+              <ChevronLeft size={14} /> <span className={styles.backLabel}>Vishwakarma</span>
+              <span className={styles.backSep}>/</span>
+              <span className={styles.backCurrent}>{hld.project_name}</span>
+            </button>
+          </div>
 
           {/* Center: pill tab group */}
           <nav className={styles.tabGroup} role="tablist" aria-label="HLD view">
-            <TabButton id="tab-document" active={activeTab === 'document'} icon={<FileText size={13} />} label="Document" onClick={() => setActiveTab('document')} />
-            <TabButton id="tab-diagram" active={activeTab === 'diagram'} icon={<GitBranch size={13} />} label="Diagram" onClick={() => setActiveTab('diagram')} />
-            <TabButton id="tab-adrs" active={activeTab === 'adrs'} icon={<BookMarked size={13} />} label={`ADRs${hld ? ` (${hld.adrs.length})` : ''}`} onClick={() => setActiveTab('adrs')} />
+            <TabButton id="tab-document" active={activeTab === 'document'} icon={<FileText size={13} />} label="Document" onClick={() => setTab('document')} />
+            <TabButton id="tab-diagram" active={activeTab === 'diagram'} icon={<GitBranch size={13} />} label="Diagram" onClick={() => setTab('diagram')} />
+            <TabButton id="tab-adrs" active={activeTab === 'adrs'} icon={<BookMarked size={13} />} label={`ADRs${hld ? ` (${hld.adrs.length})` : ''}`} onClick={() => setTab('adrs')} />
           </nav>
 
-          {/* Right: quality badge + export */}
+          {/* Right: save indicator + export */}
           <span className={styles.headerRight}>
-            <QualityBadge adrsCount={hld.adrs.length} sectionsCount={hld.sections.length} />
-            <button className={styles.exportBtn} title="Export (coming soon)" disabled>
+            {saveStatus === 'saving' && (
+              <span className={styles.saveStatus}>Saving…</span>
+            )}
+            {saveStatus === 'saved' && (
+              <span className={`${styles.saveStatus} ${styles.saveStatusSaved}`}>
+                <Check size={11} /> Saved
+              </span>
+            )}
+            <button className={styles.exportBtn} onClick={handleExport} title="Export as Markdown">
               <Download size={13} /> Export
             </button>
           </span>
@@ -234,18 +334,6 @@ function extractJson(raw: string): string {
   }
 }
 
-function QualityBadge({ adrsCount, sectionsCount }: { adrsCount: number; sectionsCount: number }) {
-  // Simple heuristic score from output richness
-  const base = Math.min(60 + adrsCount * 7 + sectionsCount * 2, 98)
-  const score = base
-  const color = score >= 85 ? '#10b981' : score >= 70 ? '#f59e0b' : '#ef4444'
-  return (
-    <span className={styles.qualityBadge} style={{ borderColor: color, color }} title="Architecture completeness score">
-      <ShieldCheck size={12} style={{ color }} />
-      {score}%
-    </span>
-  )
-}
 
 // ---------------------------------------------------------------------------
 // Helpers — extract live section data from the raw SSE token stream

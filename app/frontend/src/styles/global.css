@@ -31,3 +31,20 @@ a:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ── Global mobile baseline ── */
+@media (max-width: 700px) {
+  /* AppHeader padding */
+  .header { padding: 0 16px !important; }
+
+  /* SpecUpload */
+  .main  { padding: 16px !important; }
+  .hero  { margin-bottom: 16px !important; }
+  .title { font-size: 22px !important; }
+
+  /* Interview body */
+  .body  { padding: 0 !important; }
+
+  /* FormatSelection */
+  .grid  { grid-template-columns: 1fr !important; }
+}
