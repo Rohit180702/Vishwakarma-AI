@@ -36,7 +36,7 @@ These rules override all other instructions. Every violation produces an invalid
 - NEVER write an ADR without at least one negative consequence or accepted trade-off.
 
 **Diagrams**
-- MUST generate at least a Context diagram (L1) and a Container diagram (L2).
+- MUST generate a Context diagram (L1), a Container diagram (L2), a Component diagram (L3) for the most complex container, and at least one Sequence diagram for the primary runtime flow.
 - NEVER mix C4 levels in one diagram. Level rules:
   - Context (L1): persons + software systems (including the target system) ONLY. No containers or components.
   - Container (L2): containers within a `subgraph` system boundary PLUS persons and external `[Software System]` elements outside the boundary. Never show internal components at this level.
@@ -44,9 +44,9 @@ These rules override all other instructions. Every violation produces an invalid
 - NEVER use HTML-encoded characters in diagram labels. NEVER use non-`snake_case` node IDs.
 
 **C4-specific**
-- MUST state team ownership and Team Topologies type for every container in Section 3. NEVER leave ownership implicit.
+- MUST state team ownership for every container in Section 3. NEVER leave ownership implicit.
 - NEVER add a Component diagram (L3) unless the container's internals are architecturally significant, and if you do add one, scope it to EXACTLY ONE container per diagram.
-- MUST include at least one measurable fitness function per quality attribute in Section 1. A quality attribute without an automated verification is a wish, not an engineering commitment.
+
 
 ---
 
@@ -81,18 +81,12 @@ A common mistake is drawing a container diagram with only containers and omittin
 **Audience:** Any stakeholder. No technology terms in this section.
 
 - One paragraph: what problem this system solves, for whom, and at what scale.
-- Top three to five measurable quality attributes — these govern every ADR choice. Each must
-  include a measurable acceptance criterion with a number and units.
-- **Fitness functions:** For each quality attribute, name how it will be automatically verified:
-  > "Availability 99.9% monthly — Verified by: Datadog SLO monitor on `/health`. Alerts page on-call when 30-day error rate exceeds 0.1%."
-  A quality attribute without an automated fitness function is a wish, not a commitment.
+- Top three to five quality attributes that govern every ADR choice. Each must state a measurable target in the form: `[attribute]: [number + units] under [scenario]`. Example: "Availability: 99.9% monthly uptime under normal operating conditions." Do not add verification mechanisms — state the target only.
 - Key constraints: technology mandates, team skills, regulatory requirements.
 
-*Conway's Law:* State the team(s) who will own and operate this system. The container boundaries
-you choose in Section 3 should reflect these team boundaries — not the other way around. If you
-are making a decomposition choice here, explain how it aligns with team ownership.
+**Team Ownership:** State the team(s) who will own and operate this system. The container boundaries you choose in Section 3 should reflect these team boundaries. If you are making a decomposition choice here, explain how it aligns with team ownership.
 
-*Monolith First (Fowler/Thoughtworks):* If the spec describes an early-stage product or a small team (fewer than three stream-aligned teams), challenge any microservices decomposition here. A well-structured monolith or modular monolith is the correct starting point. Premature distribution creates operational and coupling overhead that kills velocity. State the decomposition prerequisite: "We will extract [service] when [condition — e.g., team boundary, scaling bottleneck, or deployment independence need]."
+*Decomposition challenge:* If the spec describes an early-stage product or a small team, challenge any microservices decomposition here. A single deployable unit or modular monolith is often the correct starting point. Premature distribution creates operational and coupling overhead. State the extraction prerequisite: "We will extract [service] when [condition — e.g., team boundary, scaling bottleneck, or deployment independence need]."
 
 *Bounded Contexts (DDD):* Identify the major bounded contexts — the logical areas where a consistent domain model applies. Container boundaries (Section 3) should align with bounded context boundaries. If the spec uses ambiguous terms (e.g., "User" means different things to billing vs. auth), name the context and disambiguate here.
 
@@ -124,21 +118,13 @@ Describe every deployable unit in the `container` diagram. For each container:
 - For inter-container interactions: protocol, data format, sync vs. async
 - Bounded context: which DDD context does this container belong to?
 
-*Conway's Law (mandatory):* State which team owns each container. If any container boundary does
-not match a team boundary, flag it explicitly as an architectural risk. Teams that own more
-containers than they have capacity to maintain will create a coordination bottleneck.
+**Team Ownership (mandatory):** State which team owns each container. If any container boundary does not align with a team boundary, flag it explicitly as an architectural risk — teams that own more containers than they can maintain create coordination bottlenecks.
 
-*Team Topologies classification:* For each owning team, identify its type:
-- **Stream-aligned** — owns a value stream end-to-end; normal mode of operation
-- **Platform** — provides X-as-a-Service to stream-aligned teams; the container should have a self-service consumption model
-- **Enabling** — temporarily helps a stream-aligned team acquire capability; if permanent, this is a Team Topologies smell
-- **Complicated-subsystem** — requires specialist knowledge to build and maintain (e.g., ML pipeline, cryptography service)
-
-Format: "Owned by: [Team name] ([Team Topologies type])"
+Format: "Owned by: [Team name]"
 
 - BAD: "A Kafka instance."
 - GOOD: "Event Bus [Container: Kafka 3.6] — async event streaming between Order Service and
-  Inventory Service, partitioned by tenant ID. Owned by: Platform team (Platform). [ADR-003]"
+  Inventory Service, partitioned by tenant ID. Owned by: Platform team. [ADR-003]"
 
 *Just enough architecture:* If all your containers are simple enough that their internals are
 obvious from the container diagram, do NOT add Component diagrams. Premature decomposition is
@@ -170,13 +156,7 @@ This section explains the ADR governance:
 
 Then list all ADRs by ID and title.
 
-*Thoughtworks Lightweight ADR standard:* Each ADR captures one significant, hard-to-reverse
-decision. It is short (one to two pages), written at decision time, and stored alongside the code
-it affects. The alternatives section is the most important part — it shows the options that were
-genuinely considered and why they were rejected. A strawman alternative undermines the entire
-record.
-
-*Evolutionary architecture lens:* Every ADR should state whether the decision enables or constrains future change. Reversible decisions need less justification — irreversible decisions need proportionally more evidence. If an ADR creates vendor lock-in or makes decomposition harder later, say so explicitly. This honest acknowledgement is more valuable to future architects than false confidence.
+*Lightweight ADR standard:* Each ADR captures one significant, hard-to-reverse decision. It is short (one to two pages), written at decision time, and stored alongside the code it affects. The alternatives section is the most important part — it shows the options that were genuinely considered and why they were rejected. A strawman alternative undermines the entire record.
 
 ### Section 6 — Risks and Open Questions
 
@@ -222,11 +202,8 @@ Wherever an assumption is stated as fact or needs confirmation:
 | P5 Security coverage | Auth mechanism, authorisation model, and data classification are addressed |
 | P6 No placeholders | No "TBD" without criteria, "TODO", or vague technology categories |
 | P7 C4 level purity | Context (L1): persons + software systems only. Container (L2): containers in system subgraph + persons + external software systems outside. Component (L3): ONE container's internals only. |
-| P8 Conway's Law | Every container in Section 3 states its owning team and Team Topologies type; misalignments are flagged |
+| P8 Team ownership | Every container in Section 3 states its owning team; boundary–team misalignments are flagged |
 | P9 ADR governance | Section 5 states where ADRs live, who approves, and how they are superseded |
-| P10 Fitness functions | Every quality attribute in Section 1 has a named automated verification method |
-| P11 Evolutionary lens | Every ADR states whether the decision enables or constrains future change |
-| P12 Monolith First challenge | Any microservices decomposition is justified against team scale, bounded contexts, and operational maturity |
 
 ---
 
@@ -273,92 +250,106 @@ One ADR per significant, hard-to-reverse container technology or structural deci
 }
 ```
 
-### `diagrams` — C4 diagrams as Mermaid
+### `diagrams` — C4 diagrams as structured JSON
 
-Generate `context` (Level 1) and `container` (Level 2). Add `component` only where a container is
-complex enough to warrant it.
+MUST generate all four diagram types:
+- `context` (L1) — persons + software systems
+- `container` (L2) — all deployable units with persons and external systems
+- `component` (L3) — internals of the most architecturally significant container
+- `sequence` — the primary happy-path runtime flow
 
-Each diagram is a **Mermaid flowchart string** rendered in an interactive React Flow viewer. The
-label rules below are non-negotiable.
+All four are required. Omitting any diagram type is a validation failure.
 
-#### STRICT LABEL RULES
+Each diagram (except `sequence`) is a **structured JSON object** — NOT Mermaid syntax.
+Sequence diagrams use Mermaid `sequenceDiagram` syntax.
 
-**Node labels — exactly 2 lines:**
-- Line 1: Short plain-English name, **≤ 25 chars**, max 3 words
-- Line 2: `[Type: Technology]` annotation
-- ❌ NEVER: 3+ lines, HTML tags, `&lt;` `&gt;` `&amp;`, code fragments, long descriptions
+#### Node types
+Use exactly one of these values in the `type` field:
 
-**Edge labels — max 5 words:**
-- Format: `"Verb noun via PROTOCOL"` or just `"PROTOCOL"`
-- Examples: `"REST/HTTPS"`, `"SQL/TCP-5432"`, `"Reads tasks"`, `"Emits via AMQP"`, `"gRPC"`
-- ❌ NEVER: sentences, HTML entities, >5 words
+| type | Use for |
+|---|---|
+| `person` | Human actor — user, admin, operator |
+| `system` | Your software system (inside boundary) |
+| `external_system` | Third-party or out-of-scope system |
+| `container` | Deployable unit — service, API, worker |
+| `component` | Logical unit inside a container |
+| `database` | Relational or document data store |
+| `queue` | Message queue or event bus |
+| `cache` | In-memory cache (Redis, Memcached) |
+| `frontend` | Web app, mobile app, SPA |
+| `cloud_service` | Managed cloud service — S3, CDN, etc. |
 
-#### Layout rules
-- Context + Container: `flowchart LR`
-- Component: `flowchart TB`
-- Node IDs: plain `snake_case` only
-- All edge labels double-quoted: `-->|"label"|`
-- Context: persons + software systems (including target). Max 10 elements. Use `subgraph` for target system boundary.
-- Container: persons + external `[Software System]` nodes outside, containers inside a `subgraph` boundary. Max 15 elements.
-- Component: components of ONE container only, with `subgraph` for the container boundary. Max 20 elements.
+#### Field rules
+- `id`: `snake_case`, unique within the diagram
+- `label`: Short name, ≤ 25 chars, max 3 words, plain English — no brackets, no type suffixes
+- `description`: One sentence, ≤ 80 chars — what this element does
+- `technology`: Stack / protocol — e.g. `"React 18"`, `"PostgreSQL 16"`, `"gRPC"` — omit if unknown
+- `label` on relationships: ≤ 5 words — e.g. `"REST/HTTPS"`, `"Reads sessions"`, `"Emits events"`
+- `technology` on relationships: protocol only — e.g. `"HTTPS"`, `"AMQP"`, `"gRPC"`
+- `async`: `true` for event-driven / fire-and-forget; `false` for synchronous calls
+
+#### Boundary rules
+- Context diagram: one boundary wrapping the target software system node(s)
+- Container diagram: one boundary wrapping all containers that are part of your system
+- Component diagram: one boundary wrapping the container being decomposed
+- NEVER put `person` or `external_system` nodes inside a boundary
+
+#### Cardinality
+- Context: max 10 nodes (persons + systems). Always include at least one `person` and your `system` node.
+- Container: max 15 nodes. Always include persons and external systems — they show WHY containers exist.
+- Component: max 20 nodes. Scope to exactly ONE container.
 
 ```json
 {
-  "level": "context | container | component",
-  "mermaid_syntax": "flowchart LR\n  ..."
+  "level": "context",
+  "title": "Order Platform — System Context",
+  "nodes": [
+    {"id": "customer", "type": "person", "label": "Customer", "description": "Places and tracks orders"},
+    {"id": "order_platform", "type": "system", "label": "Order Platform", "description": "Core order management system", "technology": "Node.js / PostgreSQL"},
+    {"id": "stripe", "type": "external_system", "label": "Stripe", "description": "Payment processing", "technology": "Stripe API"},
+    {"id": "sendgrid", "type": "external_system", "label": "SendGrid", "description": "Transactional email", "technology": "SMTP/API"}
+  ],
+  "relationships": [
+    {"from": "customer", "to": "order_platform", "label": "Places orders", "technology": "HTTPS"},
+    {"from": "order_platform", "to": "stripe", "label": "Processes payments", "technology": "REST/HTTPS"},
+    {"from": "order_platform", "to": "sendgrid", "label": "Sends receipts", "technology": "SMTP/TLS"}
+  ],
+  "boundaries": [
+    {"id": "b_platform", "label": "Order Platform", "node_ids": ["order_platform"]}
+  ]
 }
 ```
 
-✅ Correct example (context — L1):
-```
-flowchart LR
-  customer["End User\n[Person]"]
-
-  subgraph platform["Order Platform\n[Software System]"]
-    direction LR
-  end
-
-  stripe["Stripe\n[Software System]"]
-  email["SendGrid\n[Software System]"]
-
-  customer -->|"HTTPS"| platform
-  platform -->|"REST/HTTPS"| stripe
-  platform -->|"SMTP/TLS"| email
-```
-
-✅ Correct example (container — L2, showing persons + external systems + containers):
-```
-flowchart LR
-  user["End User\n[Person]"]
-  stripe["Stripe\n[Software System]"]
-
-  subgraph platform["Order Platform"]
-    web["Web App\n[Container: React 18]"]
-    api["Order API\n[Container: Node.js 20]"]
-    db[("Orders DB\n[Database: PostgreSQL 16]")]
-    queue["Job Queue\n[Container: Redis 7]"]
-  end
-
-  user -->|"HTTPS"| web
-  web -->|"REST/HTTPS"| api
-  api -->|"SQL/TCP-5432"| db
-  api -->|"Redis protocol"| queue
-  api -->|"REST/HTTPS"| stripe
+```json
+{
+  "level": "container",
+  "title": "Order Platform — Containers",
+  "nodes": [
+    {"id": "customer", "type": "person", "label": "Customer", "description": "Places orders via browser"},
+    {"id": "web_app", "type": "frontend", "label": "Web App", "description": "Customer-facing SPA", "technology": "React 18"},
+    {"id": "order_api", "type": "container", "label": "Order API", "description": "Business logic and REST endpoints", "technology": "Node.js 20"},
+    {"id": "orders_db", "type": "database", "label": "Orders DB", "description": "Primary data store", "technology": "PostgreSQL 16"},
+    {"id": "job_queue", "type": "queue", "label": "Job Queue", "description": "Async task processing", "technology": "Redis 7"},
+    {"id": "stripe", "type": "external_system", "label": "Stripe", "description": "Payment processing", "technology": "Stripe API"}
+  ],
+  "relationships": [
+    {"from": "customer", "to": "web_app", "label": "Uses", "technology": "HTTPS"},
+    {"from": "web_app", "to": "order_api", "label": "API calls", "technology": "REST/HTTPS"},
+    {"from": "order_api", "to": "orders_db", "label": "Reads / writes", "technology": "SQL/TCP"},
+    {"from": "order_api", "to": "job_queue", "label": "Enqueues tasks", "technology": "Redis protocol", "async": true},
+    {"from": "order_api", "to": "stripe", "label": "Processes payments", "technology": "REST/HTTPS"}
+  ],
+  "boundaries": [
+    {"id": "b_platform", "label": "Order Platform", "node_ids": ["web_app", "order_api", "orders_db", "job_queue"]}
+  ]
+}
 ```
 
-❌ Wrong container diagram (missing persons + external systems — explains nothing):
-```
-flowchart LR
-  web["Web App\n[Container: React 18]"]
-  api["Order API\n[Container: Node.js 20]"]
-  db[("Orders DB\n[Database: PostgreSQL 16]")]
-  web -->|"REST/HTTPS"| api
-  api -->|"SQL/TCP"| db
-```
-
-❌ Wrong (DO NOT generate this — label violations):
-```
-flowchart LR
-  api["[Container: Node.js 20]\nHandles all API requests\n(Embedded &lt;script&gt; logic)"]
-  user -->|"Sends a POST request with task data and receives a JSON response with the created task ID"| api
+For `sequence` diagrams, use Mermaid `sequenceDiagram` syntax:
+```json
+{
+  "level": "sequence",
+  "title": "Place Order — Happy Path",
+  "mermaid_syntax": "sequenceDiagram\n  actor Customer\n  participant WebApp\n  ..."
+}
 ```

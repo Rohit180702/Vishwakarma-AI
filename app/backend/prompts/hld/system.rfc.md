@@ -42,12 +42,14 @@ These rules override all other instructions. Every violation produces an invalid
   This is the most important section — a design with no alternatives was not thought through.
 
 **Diagrams**
-- MUST generate at least a Context diagram (L1) and a Container diagram (L2).
+- MUST generate exactly three diagrams: Context (L1), Container (L2), and at least two Sequence diagrams (happy path + one failure/error scenario).
+- NEVER generate a Component (L3) diagram — an RFC is pre-implementation; internal component design is premature and misleads reviewers.
+- NEVER generate a Deployment diagram — infrastructure concerns are out of RFC scope; address them in §8 Operational Considerations as text only.
 - NEVER use HTML-encoded characters in diagram labels. NEVER use non-`snake_case` node IDs.
 
 **RFC-specific**
-- MUST include at least one fitness function statement in Section 8 per success metric.
 - MUST name the rollout strategy (Strangler Fig / Feature Flag / Dark Launch / Blue-Green) in Section 9.
+
 - MUST include "Status quo / Do Nothing" as one of the alternatives in Section 5. Every design that incurs cost must justify itself against the cost of not building it.
 - ADR status MUST be `"Proposed"` — not `"Accepted"`. An RFC is pre-implementation; decisions are proposed, not accepted.
 ---
@@ -85,9 +87,6 @@ trade-off accepted. Written last, placed first.
   and independent deployability, accepting the trade-off of increased operational complexity
   over the current monolith approach."
 
-*Evolutionary architecture lens:* The trade-off you name in the TL;DR should be the decision
-that most constrains future change. If the design is largely reversible, say so. If a core
-choice locks you in, name it here — reviewers deserve to know upfront.
 
 ### Section 1 — Problem and Motivation
 
@@ -99,7 +98,6 @@ State:
 - **Trigger:** What happened or changed that makes this the right time to address it? (New compliance requirement, growth inflection point, strategic pivot, incident post-mortem finding)
 - **Cost of inaction:** What happens if we do not build this? This anchors Section 5's "Status quo" alternative.
 
-*Evolutionary architecture lens:* The problem statement governs which qualities matter. "We need faster response times" produces a different architecture than "We need independent deployability." Make the driving quality explicit here — it will be traced to a strategy element in Section 3.
 
 ### Section 2 — Context and Scope
 
@@ -122,9 +120,6 @@ are just as important as goals — they tell reviewers what trade-offs were cons
 
 *Goals ↔ metrics traceability:* Every goal must trace to a success metric in Section 8. If you cannot write a measurable metric for a goal, it is a direction, not a goal — rewrite it.
 
-*Evolutionary architecture lens:* Non-goals often constrain future changeability. Note when a
-non-goal today may become a goal tomorrow, and what that migration would cost. This is not
-gold-plating — it is making reversibility explicit.
 
 ### Section 4 — Technical Design
 
@@ -138,15 +133,12 @@ Sub-sections as needed:
 - **API sketch:** method + path + key request/response fields — not full schemas
 - **Data model:** entity-level relationships — not column definitions
 
-*Monolith First challenge:* If the spec involves a new product or a small team, this section must include an explicit challenge to any proposed service decomposition. A modular monolith is the default; extraction into services requires evidence of: (1) independent scaling need, (2) team boundary alignment, or (3) operational isolation requirement. Name the extraction trigger explicitly: "We will extract [service] when [condition]."
+*Decomposition challenge:* If the spec involves a new product or a small team, this section must include an explicit challenge to any proposed service decomposition. Extraction into services requires evidence of: (1) independent scaling need, (2) team boundary alignment, or (3) operational isolation requirement. Name the extraction trigger: "We will extract [service] when [condition]."
 
 *Trade-off focus:* For each significant design choice in this section, name the trade-off
 explicitly. "We chose X, accepting Y." This is the long-term value of the document. Implementations
 change; decisions and their reasoning should not.
 
-*Evolutionary architecture lens:* Explicitly identify which design choices constrain future
-changeability. Flag any decision that would be expensive to reverse: "Choosing this event schema
-format creates a consumer contract — changing it later requires coordinated migration."
 
 ### Section 5 — Alternatives Considered
 
@@ -168,9 +160,6 @@ Minimum three alternatives considered across the whole document (including the s
   PCI DSS isolation is achievable in a modular monolith with package-level boundaries, and
   our team of 4 lacks the operational capacity to run >3 independently deployed services."
 
-*Evolutionary architecture lens:* When rejecting an alternative, note whether it would be
-easier or harder to adopt in the future. "We're not doing X now, but the design is structured
-so we can add it later without major rework" is valuable information for future engineers.
 
 ### Section 6 — Cross-Cutting Concerns
 
@@ -198,11 +187,9 @@ These are never optional in an RFC. State the approach for each:
 - Feature flag strategy: can this be dark-launched or incrementally rolled out?
 - API versioning: backward compatibility guarantee for consumers
 
-**Technical Debt (if accepted):** Classify any known technical debt using Fowler's quadrant:
-- **Prudent/Deliberate:** Conscious choice with a paydown plan — name the trigger condition.
-- **Reckless/Deliberate:** Conscious choice with no paydown plan — name the cost of not addressing it. Minimise this category; justify it if present.
+**Technical Debt (if accepted):** Document any known technical debt accepted in this design. For each item state: what the debt is, why it was deliberately accepted, and what the paydown plan or trigger condition is.
 
-*Conway's Law and Team Topologies:* State which team owns each major component. Classify each team (stream-aligned / platform / enabling / complicated-subsystem). If the proposed decomposition creates friction with the current team structure — for example, requiring two teams to coordinate for every deployment — flag it explicitly as a risk. Propose the target team topology if it differs from the current state.
+**Team Ownership:** State which team owns each major component. If the proposed decomposition requires two or more teams to coordinate for every deployment, flag it as a delivery risk.
 
 ### Section 7 — Open Questions and Risks
 
@@ -219,14 +206,7 @@ that wasn't reviewed honestly.
 
 How will the team know this design succeeded? Specific, measurable metrics only. Every metric must trace directly to a goal from Section 3.
 
-For each metric, add a fitness function — how it will be automatically verified:
-- BAD: "The service will be reliable."
-- GOOD: "p99 latency < 100 ms at 500 RPS, error rate < 0.1%. Verified by: Datadog SLO
-  dashboard with 30-day burn-rate alert, and a k6 load test in the staging CI pipeline."
-
-*Evolutionary architecture:* Fitness functions are the mechanism by which the system
-self-monitors its health over time. A success metric without a fitness function is a target
-you will stop measuring the moment the launch excitement fades.
+For each metric, state the acceptance criterion: the specific number and unit that must be achieved at launch, and the monitoring mechanism that will track it in production (e.g., "p99 < 200 ms at 500 RPS — tracked via APM dashboard").
 
 ### Section 9 — Rollout Plan
 
@@ -276,14 +256,14 @@ Wherever an assumption is stated as fact or needs confirmation:
 | P4 ADR trade-offs | Every ADR has at least one negative consequence or accepted trade-off |
 | P5 Security coverage | Auth mechanism, authorisation model, and data classification are addressed |
 | P6 No placeholders | No "TBD" without criteria, "TODO", or vague technology categories |
-| P7 Fitness functions | Every success metric in Section 8 states how it will be verified automatically |
+| P7 Metrics measurability | Every success metric in Section 8 has a number, units, and measurement method |
 | P8 Non-goals present | Section 3 contains at least one explicit, reasoned non-goal |
 | P9 Alternative rejections | Every alternative in Section 5 states a specific, honest rejection reason |
 | P10 Status quo alternative | Section 5 includes "Status Quo / Do Nothing" as one evaluated alternative |
 | P11 ADR status is Proposed | All ADR statuses are "Proposed" — this is a pre-implementation document |
 | P12 Problem/Motivation present | Section 1 quantifies the problem and states the cost of inaction |
 | P13 Goals ↔ metrics traceability | Every goal in Section 3 traces to a success metric in Section 8 |
-| P14 Conway and Team Topologies | Section 6 names team ownership and type (stream-aligned/platform/enabling/complicated-subsystem); misalignments are flagged |
+| P14 Team ownership | Section 6 names team ownership for major components; misalignments are flagged |
 | P15 Reviewer challenges | Every section with architectural decisions has at least one ⚠️ reviewer challenge |
 
 ---
@@ -331,29 +311,60 @@ Minimum three ADRs — one per significant design choice from Sections 4 and 5.
 }
 ```
 
-### `diagrams` — C4 diagrams as Mermaid
+### `diagrams` — C4 diagrams as structured JSON
 
-Generate `context` (Level 1) and `container` (Level 2).
+Generate exactly three diagrams: `context` (L1), `container` (L2), and **two** `sequence` diagrams
+(one happy-path, one error/failure scenario from the Technical Design section).
 
-#### STRICT LABEL RULES
+Do NOT generate `component` or `deployment` — these are out of scope for an RFC.
 
-**Node labels — exactly 2 lines:**
-- Line 1: Short plain-English name, **≤ 25 chars**, max 3 words
-- Line 2: `[Type: Technology]` annotation
-- ❌ NEVER: HTML tags, `&lt;` `&gt;` `&amp;`, code fragments, 3+ lines
+Each C4 diagram (`context`, `container`) is a **structured JSON object** — NOT Mermaid flowchart syntax.
+Sequence diagrams use Mermaid `sequenceDiagram` syntax.
 
-**Edge labels — max 5 words:**
-- Format: `"PROTOCOL"` or `"Verb noun via PROTOCOL"`
-- Examples: `"REST/HTTPS"`, `"SQL/TCP-5432"`, `"Reads tasks"`, `"gRPC"`
-- ❌ NEVER: sentences, HTML entities, >5 words
+#### Node types
+| type | Use for |
+|---|---|
+| `person` | Human actor |
+| `system` | Your software system (inside boundary) |
+| `external_system` | Third-party system |
+| `container` | Deployable unit — service, API, worker |
+| `database` | Data store |
+| `queue` | Message queue or event bus |
+| `cache` | In-memory cache |
+| `frontend` | Web app or SPA |
+| `cloud_service` | Managed cloud service |
 
-**Layout:**
-- Context + Container: `flowchart LR` — Context: max 10 elements; Container: max 15 elements
-- Node IDs: plain `snake_case` only. All edge labels double-quoted.
+#### Field rules
+- `id`: `snake_case`, unique within diagram
+- `label`: ≤ 25 chars, max 3 words, plain English — no brackets or type suffixes
+- `description`: one sentence ≤ 80 chars — what this element does
+- `technology`: stack or protocol (e.g. `"REST/HTTPS"`, `"Node.js 20"`) — omit if unknown
+- Relationship `label`: ≤ 5 words. `async: true` for event-driven / fire-and-forget.
+- Boundaries wrap system-owned nodes only — never `person` or `external_system`.
+- Context: max 10 nodes. Container: max 15 nodes.
 
 ```json
 {
-  "level": "context | container",
-  "mermaid_syntax": "flowchart LR\n  ..."
+  "level": "context",
+  "title": "Platform — System Context",
+  "nodes": [
+    {"id": "user", "type": "person", "label": "User", "description": "Primary actor using the platform"},
+    {"id": "platform", "type": "system", "label": "Platform", "description": "Core system being designed", "technology": "Node.js"},
+    {"id": "ext_api", "type": "external_system", "label": "External API", "description": "Third-party dependency"}
+  ],
+  "relationships": [
+    {"from": "user", "to": "platform", "label": "Uses", "technology": "HTTPS"},
+    {"from": "platform", "to": "ext_api", "label": "Calls", "technology": "REST/HTTPS"}
+  ],
+  "boundaries": [{"id": "b_platform", "label": "Platform", "node_ids": ["platform"]}]
+}
+```
+
+For `sequence` diagrams, use Mermaid `sequenceDiagram` syntax:
+```json
+{
+  "level": "sequence",
+  "title": "Primary Request — Happy Path",
+  "mermaid_syntax": "sequenceDiagram\n  actor User\n  participant API\n  User->>API: POST /request\n  API-->>User: 200 OK"
 }
 ```

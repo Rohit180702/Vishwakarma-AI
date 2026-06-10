@@ -29,7 +29,8 @@ These rules override all other instructions. Every violation produces an invalid
 - NEVER write an ADR without at least one negative consequence or accepted trade-off.
 
 **Diagrams**
-- MUST generate at least a Context diagram (L1) and a Container diagram (L2).
+- MUST generate Context (L1), Container (L2), and at least one Sequence diagram for the primary runtime flow.
+- Generate Component (L3) only when the user's template contains a section explicitly about internal component design or a specific service's internals.
 - NEVER use HTML-encoded characters in diagram labels. NEVER use non-`snake_case` node IDs.
 
 ---
@@ -106,27 +107,58 @@ String. Extract from the input spec.
 }
 ```
 
-### `diagrams` — C4 diagrams as Mermaid
+### `diagrams` — C4 diagrams as structured JSON
 
-Generate `context` (Level 1) and `container` (Level 2).
+Always generate `context` (L1), `container` (L2), and at least one `sequence` diagram.
+Generate `component` (L3) only when the user's template has a dedicated internal-design section.
 
-#### STRICT LABEL RULES
+C4 structural diagrams (`context`, `container`, `component`) use structured JSON — NOT Mermaid flowchart syntax.
+Sequence diagrams use Mermaid `sequenceDiagram` syntax.
 
-**Node labels — exactly 2 lines:**
-- Line 1: Short plain-English name, **≤ 25 chars**, max 3 words
-- Line 2: `[Type: Technology]` annotation
-- ❌ NEVER: HTML tags, `&lt;` `&gt;` `&amp;`, code fragments, 3+ lines
+#### Node types
+| type | Use for |
+|---|---|
+| `person` | Human actor |
+| `system` | Your software system (inside boundary) |
+| `external_system` | Third-party system |
+| `container` | Deployable unit — service, API, worker |
+| `database` | Data store |
+| `queue` | Message queue or event bus |
+| `cache` | In-memory cache |
+| `frontend` | Web app or SPA |
+| `cloud_service` | Managed cloud service |
 
-**Edge labels — max 5 words:**
-- Format: `"PROTOCOL"` or `"Verb noun via PROTOCOL"`
-- ❌ NEVER: sentences, HTML entities, >5 words
-
-**Layout:** `flowchart LR`. Node IDs: `snake_case`. All labels double-quoted.
-Context: max 10 elements. Container: max 15 elements.
+#### Field rules
+- `id`: `snake_case`, unique within diagram
+- `label`: ≤ 25 chars, max 3 words, plain English
+- `description`: one sentence ≤ 80 chars
+- `technology`: stack or protocol — omit if unknown
+- Relationship `label`: ≤ 5 words. `async: true` for event-driven links.
+- Boundaries wrap system-owned nodes only — never `person` or `external_system`.
+- Context: max 10 nodes. Container: max 15. Component: max 12.
 
 ```json
 {
-  "level": "context | container",
-  "mermaid_syntax": "flowchart LR\n  ..."
+  "level": "context",
+  "title": "System Context",
+  "nodes": [
+    {"id": "user", "type": "person", "label": "User", "description": "Primary actor"},
+    {"id": "platform", "type": "system", "label": "Platform", "description": "Core system", "technology": "Node.js"},
+    {"id": "ext", "type": "external_system", "label": "External API", "description": "Third-party dependency"}
+  ],
+  "relationships": [
+    {"from": "user", "to": "platform", "label": "Uses", "technology": "HTTPS"},
+    {"from": "platform", "to": "ext", "label": "Calls", "technology": "REST/HTTPS"}
+  ],
+  "boundaries": [{"id": "b_platform", "label": "Platform", "node_ids": ["platform"]}]
+}
+```
+
+For `sequence` diagrams, use Mermaid `sequenceDiagram` syntax:
+```json
+{
+  "level": "sequence",
+  "title": "Primary Flow — Happy Path",
+  "mermaid_syntax": "sequenceDiagram\n  actor User\n  participant API\n  User->>API: POST /action\n  API-->>User: 200 OK"
 }
 ```
