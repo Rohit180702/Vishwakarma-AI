@@ -21,6 +21,8 @@ class GenerateHLDRequest(BaseModel):
     custom_sections: list[str] | None = Field(None, min_length=1, max_length=20)
     # For file-upload custom templates (raw file content — .md / .docx / .txt)
     custom_template_text: str | None = Field(None, description="Raw text of user-uploaded template file")
+    # When True, append the ThoughtWorks enrichment overlay to the base prompt
+    thoughtworks_mode: bool = Field(False, description="Augment the standard template with ThoughtWorks engineering principles")
 
     @field_validator("template")
     @classmethod

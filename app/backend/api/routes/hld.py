@@ -1,21 +1,35 @@
 """
 POST /api/v1/hld/generate        → full JSON response
 POST /api/v1/hld/generate/stream → SSE stream of tokens
+POST /api/v1/hld/diagram/query   → conversational diagram flow query
 """
 from __future__ import annotations
 
 import json
 
 import re
+from typing import Any
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
-from api.deps import get_hld_generation_service
+from api.deps import get_hld_generation_service, get_llm
 from api.models.requests import GenerateHLDRequest
-from api.models.responses import ADRAlternativeOut, ADROut, C4DiagramOut, GenerateHLDResponse, HLDSectionOut, HLDQualityReportOut, QualityCheckOut
+from infrastructure.llm.anthropic_llm import AnthropicLLM
+from api.models.responses import (
+    ADRAlternativeOut, ADROut,
+    C4DiagramOut, C4NodeOut, C4RelationshipOut, C4BoundaryOut,
+    GenerateHLDResponse,
+    HLDSectionOut, HLDQualityReportOut, QualityCheckOut,
+    StrictCheckOut, StrictQualityReportOut,
+)
 from application.hld_generation import HLDGenerationService
-from domain.models import HLDTemplate
+from domain.models import (
+    ADR, ADRAlternative, C4Diagram, DiagramLevel,
+    HLDDocument, HLDSection, HLDTemplate,
+)
+from domain.quality_strict import HLDStrictValidator
 
 router = APIRouter(prefix="/hld", tags=["hld"])
 
@@ -33,6 +47,7 @@ async def generate_hld(
     doc = await hld_svc.generate(
         body.spec_text, HLDTemplate(body.template),
         body.custom_sections, body.custom_template_text,
+        body.thoughtworks_mode,
     )
     return _to_response(doc)
 
@@ -45,6 +60,7 @@ async def stream_hld(
     token_stream = await hld_svc.stream(
         body.spec_text, HLDTemplate(body.template),
         body.custom_sections, body.custom_template_text,
+        body.thoughtworks_mode,
     )
 
     async def event_generator():
@@ -65,6 +81,112 @@ async def stream_hld(
         event_generator(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Strict quality evaluation endpoint
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/evaluate",
+    response_model=StrictQualityReportOut,
+    status_code=status.HTTP_200_OK,
+    summary="Run strict quality checks on a previously generated HLD",
+)
+async def evaluate_hld(body: GenerateHLDRequest) -> StrictQualityReportOut:
+    """
+    Accepts the same payload as /generate but does NOT call the LLM.
+    Instead, it expects the caller to pass in a pre-generated HLD as
+    custom_template_text and runs strict quality checks on it.
+
+    More practically: the eval script calls /generate first to get the HLD JSON,
+    then POSTs that JSON here for the strict report.
+    """
+    raise NotImplementedError("Use /evaluate/doc directly with a parsed HLD document.")
+
+
+@router.post(
+    "/evaluate/doc",
+    response_model=StrictQualityReportOut,
+    status_code=status.HTTP_200_OK,
+    summary="Run strict quality evaluation on a raw HLD JSON document",
+)
+async def evaluate_hld_doc(body: dict) -> StrictQualityReportOut:
+    """
+    Accepts the raw JSON output of /generate and returns a detailed strict
+    quality report without calling the LLM.
+    """
+    doc = _parse_hld_from_dict(body)
+    report = HLDStrictValidator().validate(doc)
+    return StrictQualityReportOut(
+        template=report.template,
+        passed=report.passed,
+        score=report.score,
+        structural_score=report.structural_score,
+        semantic_score=report.semantic_score,
+        checks=[
+            StrictCheckOut(
+                id=c.id,
+                label=c.label,
+                passed=c.passed,
+                message=c.message,
+                tier=c.tier,
+                template_specific=c.template_specific,
+            )
+            for c in report.checks
+        ],
+    )
+
+
+def _parse_hld_from_dict(data: dict) -> HLDDocument:
+    """Reconstruct a domain HLDDocument from the raw /generate JSON response."""
+    sections = [
+        HLDSection(
+            key=s.get("key", ""),
+            number=s.get("number", ""),
+            title=s.get("title", ""),
+            content=s.get("content", ""),
+            reviewer=s.get("reviewer"),
+        )
+        for s in data.get("sections", [])
+    ]
+    adrs = [
+        ADR(
+            id=a.get("id", ""),
+            title=a.get("title", ""),
+            status=a.get("status", ""),
+            context=a.get("context", ""),
+            decision=a.get("decision", ""),
+            alternatives=[
+                ADRAlternative(
+                    option=alt.get("option", ""),
+                    pros=alt.get("pros", []),
+                    cons=alt.get("cons", []),
+                )
+                for alt in a.get("alternatives", [])
+            ],
+            consequences_positive=a.get("consequences_positive", []),
+            consequences_negative=a.get("consequences_negative", []),
+            cost_band=a.get("cost_band", "$"),
+        )
+        for a in data.get("adrs", [])
+    ]
+    diagrams = []
+    for d in data.get("diagrams", []):
+        try:
+            diagrams.append(C4Diagram(
+                level=DiagramLevel(d.get("level", "context")),
+                mermaid_syntax=d.get("mermaid_syntax", ""),
+            ))
+        except ValueError:
+            pass
+    return HLDDocument(
+        project_name=data.get("project_name", ""),
+        template=HLDTemplate(data.get("template", "arc42")),
+        sections=sections,
+        adrs=adrs,
+        diagrams=diagrams,
     )
 
 
@@ -132,9 +254,64 @@ def _to_response(doc) -> GenerateHLDResponse:
         diagrams=[
             C4DiagramOut(
                 level=d.level.value,
+                title=d.title,
+                nodes=[
+                    C4NodeOut(id=n.id, type=n.type.value, label=n.label,
+                              description=n.description, technology=n.technology)
+                    for n in d.nodes
+                ],
+                relationships=[
+                    C4RelationshipOut(from_id=r.from_id, to_id=r.to_id,
+                                      label=r.label, technology=r.technology,
+                                      async_comm=r.async_comm)
+                    for r in d.relationships
+                ],
+                boundaries=[
+                    C4BoundaryOut(id=b.id, label=b.label, node_ids=b.node_ids)
+                    for b in d.boundaries
+                ],
                 mermaid_syntax=d.mermaid_syntax,
             )
             for d in doc.diagrams
         ],
         quality_report=qr,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Diagram conversational query
+# ---------------------------------------------------------------------------
+
+class DiagramQueryRequest(BaseModel):
+    question: str
+    diagram: dict[str, Any]
+
+
+class DiagramStep(BaseModel):
+    node_id: str
+    explanation: str
+
+
+class DiagramQueryResponse(BaseModel):
+    steps: list[DiagramStep]
+
+
+@router.post(
+    "/diagram/query",
+    response_model=DiagramQueryResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Ask a natural-language question about a C4 diagram; returns an ordered step-by-step flow walkthrough",
+)
+async def query_diagram(
+    body: DiagramQueryRequest,
+    llm: AnthropicLLM = Depends(get_llm),
+) -> DiagramQueryResponse:
+    result = await llm.query_diagram(body.question, body.diagram)
+    raw_steps = result.get("steps", [])
+    return DiagramQueryResponse(
+        steps=[
+            DiagramStep(node_id=s.get("node_id", ""), explanation=s.get("explanation", ""))
+            for s in raw_steps
+            if s.get("node_id")
+        ]
     )

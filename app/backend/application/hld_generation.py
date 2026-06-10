@@ -20,8 +20,11 @@ class HLDGenerationService:
         template: HLDTemplate,
         custom_sections: list[str] | None = None,
         custom_template_text: str | None = None,
+        thoughtworks_mode: bool = False,
     ) -> HLDDocument:
-        return await self._llm.generate_hld(spec_text, template, custom_sections, custom_template_text)
+        return await self._llm.generate_hld(
+            spec_text, template, custom_sections, custom_template_text, thoughtworks_mode,
+        )
 
     async def stream(
         self,
@@ -29,5 +32,8 @@ class HLDGenerationService:
         template: HLDTemplate,
         custom_sections: list[str] | None = None,
         custom_template_text: str | None = None,
+        thoughtworks_mode: bool = False,
     ) -> AsyncIterator[str]:
-        return await self._llm.stream_hld(spec_text, template, custom_sections, custom_template_text)
+        return await self._llm.stream_hld(
+            spec_text, template, custom_sections, custom_template_text, thoughtworks_mode,
+        )

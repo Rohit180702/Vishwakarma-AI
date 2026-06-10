@@ -24,6 +24,21 @@ class DiagramLevel(str, Enum):
     CONTEXT = "context"       # C4 L1 — system + external actors
     CONTAINER = "container"   # C4 L2 — services, databases, queues
     COMPONENT = "component"   # C4 L3 — internals of one container
+    SEQUENCE = "sequence"     # Mermaid sequenceDiagram — runtime view scenarios
+    DEPLOYMENT = "deployment" # Infrastructure topology — nodes, zones, services
+
+
+class C4NodeType(str, Enum):
+    PERSON = "person"               # human actor (user, admin)
+    SYSTEM = "system"               # our software system (inside boundary)
+    EXTERNAL_SYSTEM = "external_system"  # third-party / out-of-scope system
+    CONTAINER = "container"         # deployable unit (service, app, DB wrapper)
+    COMPONENT = "component"         # logical component inside a container
+    DATABASE = "database"           # data store
+    QUEUE = "queue"                 # message queue / event bus
+    CACHE = "cache"                 # in-memory cache
+    FRONTEND = "frontend"           # web/mobile UI (client-side)
+    CLOUD_SERVICE = "cloud_service" # managed cloud service (S3, CDN, etc.)
 
 
 class MessageRole(str, Enum):
@@ -85,9 +100,38 @@ class ADR:
 
 
 @dataclass
+class C4Node:
+    id: str
+    type: C4NodeType
+    label: str
+    description: str = ""
+    technology: str = ""       # e.g. "React 18", "PostgreSQL 16", "Stripe API"
+
+
+@dataclass
+class C4Relationship:
+    from_id: str
+    to_id: str
+    label: str = ""
+    technology: str = ""       # e.g. "REST/HTTPS", "gRPC", "AMQP"
+    async_comm: bool = False   # true for async/event-driven links
+
+
+@dataclass
+class C4Boundary:
+    id: str
+    label: str
+    node_ids: list[str] = field(default_factory=list)  # node IDs inside this boundary
+
+
+@dataclass
 class C4Diagram:
     level: DiagramLevel
-    mermaid_syntax: str   # Mermaid flowchart string, rendered inline + converted to React Flow
+    title: str = ""
+    nodes: list[C4Node] = field(default_factory=list)
+    relationships: list[C4Relationship] = field(default_factory=list)
+    boundaries: list[C4Boundary] = field(default_factory=list)
+    mermaid_syntax: str = ""   # only used for level == sequence
 
 
 @dataclass

@@ -24,3 +24,7 @@ def get_hld_chat_service() -> HLDChatService:
 
 def get_interview_service() -> InterviewService:
     return InterviewService(_llm)
+
+
+def get_llm() -> AnthropicLLM:
+    return _llm

@@ -25,6 +25,7 @@ class LLMPort(ABC):
         template: HLDTemplate,
         custom_sections: list[str] | None = None,
         custom_template_text: str | None = None,
+        thoughtworks_mode: bool = False,
     ) -> HLDDocument:
         """Generate a full HLD document from raw spec text."""
 
@@ -35,6 +36,7 @@ class LLMPort(ABC):
         template: HLDTemplate,
         custom_sections: list[str] | None = None,
         custom_template_text: str | None = None,
+        thoughtworks_mode: bool = False,
     ) -> AsyncIterator[str]:
         """Stream HLD generation tokens from raw spec text."""
 

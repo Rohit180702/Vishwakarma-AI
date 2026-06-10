@@ -6,9 +6,35 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
+class C4NodeOut(BaseModel):
+    id: str
+    type: str
+    label: str
+    description: str = ""
+    technology: str = ""
+
+
+class C4RelationshipOut(BaseModel):
+    from_id: str
+    to_id: str
+    label: str = ""
+    technology: str = ""
+    async_comm: bool = False
+
+
+class C4BoundaryOut(BaseModel):
+    id: str
+    label: str
+    node_ids: list[str] = []
+
+
 class C4DiagramOut(BaseModel):
     level: str
-    mermaid_syntax: str
+    title: str = ""
+    nodes: list[C4NodeOut] = []
+    relationships: list[C4RelationshipOut] = []
+    boundaries: list[C4BoundaryOut] = []
+    mermaid_syntax: str = ""  # sequence diagrams only
 
 
 class HLDSectionOut(BaseModel):
@@ -58,6 +84,24 @@ class GenerateHLDResponse(BaseModel):
     adrs: list[ADROut]
     diagrams: list[C4DiagramOut]
     quality_report: HLDQualityReportOut | None = None
+
+
+class StrictCheckOut(BaseModel):
+    id: str
+    label: str
+    passed: bool
+    message: str
+    tier: str                  # "STR" | "SEM"
+    template_specific: bool
+
+
+class StrictQualityReportOut(BaseModel):
+    template: str
+    passed: bool
+    score: int
+    structural_score: int
+    semantic_score: int
+    checks: list[StrictCheckOut]
 
 
 class ChatResponse(BaseModel):
