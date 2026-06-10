@@ -185,7 +185,9 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
               onDragLeave={() => setState('idle')}
               onDrop={onDrop}
             >
-              <UploadCloud size={48} strokeWidth={1.25} className={styles.uploadIcon} />
+              <span className={styles.uploadIconRing}>
+                <UploadCloud size={26} strokeWidth={1.6} className={styles.uploadIcon} />
+              </span>
               <p className={styles.dropLabel}>Drag &amp; drop your specification files</p>
               <p className={styles.dropSub}>PDF · DOCX · MD · TXT</p>
               <span className={styles.browseBtn}>Browse files</span>
@@ -208,25 +210,26 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
 
         {/* Selected files list */}
         {selectedFiles.length > 0 && (
-          <div className={styles.sessions}>
-            <div className={styles.sessionsHeader}>
+          <div className={styles.filesCard}>
+            <div className={styles.filesHeader}>
               <FileText size={13} />
-              <span>Selected Files ({selectedFiles.length})</span>
+              <span>Ready to upload · {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''}</span>
             </div>
-            <div className={styles.sessionsList}>
+            <div className={styles.filesList}>
               {selectedFiles.map((fileItem: FileWithPreview) => (
-                <div key={fileItem.id} className={styles.sessionItem} style={{ cursor: 'default' }}>
-                  <FileText size={14} className={styles.sessionFileIcon} />
-                  <span className={styles.sessionName}>{fileItem.file.name}</span>
-                  <span className={styles.sessionMeta}>
-                    <span className={styles.sessionTemplate}>
-                      {(fileItem.file.size / 1024).toFixed(1)} KB
-                    </span>
+                <div key={fileItem.id} className={styles.fileItem}>
+                  <span className={styles.fileExt}>
+                    {fileItem.file.name.split('.').pop()?.toUpperCase()}
+                  </span>
+                  <span className={styles.fileName}>{fileItem.file.name}</span>
+                  <span className={styles.fileSize}>
+                    {(fileItem.file.size / 1024).toFixed(1)} KB
                   </span>
                   <button
-                    className={styles.sessionDelete}
+                    className={styles.fileRemove}
                     onClick={(e: React.MouseEvent) => { e.stopPropagation(); removeFile(fileItem.id) }}
                     title="Remove file"
+                    aria-label={`Remove ${fileItem.file.name}`}
                   >
                     <X size={12} />
                   </button>
@@ -234,7 +237,7 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
               ))}
             </div>
             <button className={styles.uploadBtn} onClick={handleUpload} disabled={state === 'uploading'}>
-              {state === 'uploading' ? 'Uploading…' : `Upload ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} →`}
+              {state === 'uploading' ? 'Uploading…' : `Generate architecture from ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} →`}
             </button>
           </div>
         )}

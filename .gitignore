@@ -46,3 +46,6 @@ Thumbs.db
 # ── Logs ─────────────────────────────────────────────────────────────────────
 *.log
 logs/
+app/frontend/src/**/*.js
+app/frontend/vite.config.js
+app/frontend/vite.config.d.ts
