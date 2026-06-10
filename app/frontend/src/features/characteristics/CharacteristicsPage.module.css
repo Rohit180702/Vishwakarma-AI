@@ -1,0 +1,256 @@
+.page {
+  min-height: 100vh;
+  background: var(--gray-50);
+}
+
+.content {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.loadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 1rem;
+}
+
+.loadingContainer h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--primary-600);
+  margin: 0;
+}
+
+.loadingContainer p {
+  color: var(--gray-600);
+  margin: 0;
+}
+
+.error, .noCharacteristics {
+  text-align: center;
+  padding: 3rem 2rem;
+  background: var(--gray-50);
+  border-radius: 0.75rem;
+  margin: 2rem 0;
+}
+
+.error h2, .noCharacteristics h2 {
+  color: var(--error-600);
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.noCharacteristics h2 {
+  color: var(--gray-700);
+}
+
+.noCharacteristics ul {
+  text-align: left;
+  max-width: 500px;
+  margin: 1.5rem auto;
+  color: var(--gray-600);
+}
+
+.noCharacteristics li {
+  margin-bottom: 0.5rem;
+}
+
+.header {
+  margin-bottom: 2rem;
+}
+
+.header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin-bottom: 0.5rem;
+}
+
+.subtitle {
+  font-size: 1.125rem;
+  color: var(--gray-600);
+  margin: 0;
+}
+
+.characteristicsList {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.card {
+  background: white;
+  border: 2px solid var(--gray-200);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  cursor: move;
+  transition: all 0.2s ease;
+}
+
+.card:hover {
+  border-color: var(--primary-400);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.card.dragging {
+  opacity: 0.5;
+  transform: scale(0.98);
+}
+
+.cardHeader {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.dragHandle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.rankBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  background: var(--primary-100);
+  color: var(--primary-700);
+  border-radius: 0.5rem;
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.dragIcon {
+  color: var(--gray-400);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.cardTitle {
+  flex: 1;
+}
+
+.cardTitle h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--gray-900);
+  margin: 0 0 0.5rem 0;
+}
+
+.metadata {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.875rem;
+}
+
+.priority {
+  font-weight: 600;
+  color: var(--primary-600);
+}
+
+.confidence {
+  color: var(--gray-600);
+}
+
+.rationale {
+  margin-bottom: 1rem;
+}
+
+.rationale summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--gray-700);
+  user-select: none;
+  font-size: 0.875rem;
+}
+
+.rationale summary:hover {
+  color: var(--primary-600);
+}
+
+.rationale p {
+  color: var(--gray-600);
+  line-height: 1.6;
+  margin-top: 0.75rem;
+  margin-bottom: 0;
+  font-size: 0.875rem;
+}
+
+.evidence {
+  border-top: 1px solid var(--gray-200);
+  padding-top: 1rem;
+}
+
+.evidence summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--gray-700);
+  user-select: none;
+  font-size: 0.875rem;
+}
+
+.evidence summary:hover {
+  color: var(--primary-600);
+}
+
+.evidence ul {
+  margin-top: 0.75rem;
+  padding-left: 1.25rem;
+}
+
+.evidence li {
+  color: var(--gray-600);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 0;
+  border-top: 1px solid var(--gray-200);
+}
+
+.backBtn, .continueBtn {
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.backBtn {
+  background: var(--gray-100);
+  color: var(--gray-700);
+}
+
+.backBtn:hover {
+  background: var(--gray-200);
+}
+
+.continueBtn {
+  background: var(--primary-600);
+  color: white;
+}
+
+.continueBtn:hover:not(:disabled) {
+  background: var(--primary-700);
+}
+
+.continueBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

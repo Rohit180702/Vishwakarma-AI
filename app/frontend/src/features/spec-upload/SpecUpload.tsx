@@ -121,7 +121,7 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
 
       onReady(response.unified_spec_text, response.session_id)
       setState('idle')
-      navigate('/interview')
+      navigate(`/characteristics?session=${response.session_id}`)
     } catch (error) {
       console.error('Upload failed:', error)
       const msg = 'Failed to upload and parse documents. Please try again.'
@@ -129,7 +129,7 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
       setState('error')
       showToast(msg, 'error')
     }
-  }, [selectedFiles, onReady, navigate])
+  }, [selectedFiles, onReady, navigate, showToast])
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()

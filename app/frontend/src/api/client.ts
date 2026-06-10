@@ -309,6 +309,89 @@ export async function streamChat(
 }
 
 // ---------------------------------------------------------------------------
+// Characteristics
+// ---------------------------------------------------------------------------
+
+export interface Characteristic {
+  id: string
+  label: string
+  priority: number
+  confidence: number
+  evidence: string[]
+  rationale: string
+  source: string
+  locked: boolean
+  history: Array<{ phase: string; priority: number; timestamp: string }>
+}
+
+export interface DetectCharacteristicsResponse {
+  session_id: string
+  characteristics: Characteristic[]
+  detected_at: string
+  count: number
+}
+
+export function detectCharacteristics(sessionId: string): Promise<DetectCharacteristicsResponse> {
+  return request<DetectCharacteristicsResponse>('/characteristics/detect', {
+    method: 'POST',
+    body: JSON.stringify({ session_id: sessionId })
+  })
+}
+
+export function updateCharacteristicPriorities(
+  sessionId: string,
+  characteristics: Characteristic[]
+): Promise<{ session_id: string; status: string; updated_at: string }> {
+  return request('/characteristics/update-priorities', {
+    method: 'POST',
+    body: JSON.stringify({ session_id: sessionId, characteristics })
+  })
+}
+
+export function getCharacteristics(sessionId: string): Promise<DetectCharacteristicsResponse> {
+  return request<DetectCharacteristicsResponse>(`/characteristics/${sessionId}`)
+}
+
+// ---------------------------------------------------------------------------
+// Impact Analysis
+// ---------------------------------------------------------------------------
+
+export interface AffectedCharacteristic {
+  characteristic_id: string
+  characteristic_label: string
+  user_priority: number
+  impact: 'positive' | 'negative' | 'neutral'
+  magnitude: 'minor' | 'moderate' | 'major'
+  reasoning: string
+}
+
+export interface ImpactAnalysisResponse {
+  severity: 'low' | 'moderate' | 'high'
+  is_recommended: boolean
+  affected_characteristics: AffectedCharacteristic[]
+  summary: string
+  recommendation_rationale: string
+  tradeoff_insight: string
+  chosen_solution: { id: string; title: string }
+  recommended_solution: { id: string; title: string }
+}
+
+export function analyzeImpact(
+  sessionId: string,
+  questionId: string,
+  chosenSolutionId: string
+): Promise<ImpactAnalysisResponse> {
+  return request<ImpactAnalysisResponse>('/impact/analyze', {
+    method: 'POST',
+    body: JSON.stringify({
+      session_id: sessionId,
+      question_id: questionId,
+      chosen_solution_id: chosenSolutionId
+    })
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Interview
 // ---------------------------------------------------------------------------
 

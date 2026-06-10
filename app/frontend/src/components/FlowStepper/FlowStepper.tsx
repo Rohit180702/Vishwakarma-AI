@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import styles from './FlowStepper.module.css'
 
 const STEPS = [
-  { label: 'Upload',    route: '/'          },
-  { label: 'Interview', route: '/interview' },
-  { label: 'Template',  route: '/format'    },
-  { label: 'Generate',  route: '/generate'  },
+  { label: 'Upload',          route: '/'          },
+  { label: 'Characteristics', route: '/characteristics' },
+  { label: 'Interview',       route: '/interview' },
+  { label: 'Template',        route: '/format'    },
+  { label: 'Generate',        route: '/generate'  },
 ]
 
 interface FlowStepperProps {

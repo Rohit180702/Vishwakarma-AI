@@ -181,7 +181,7 @@ export function InterviewPage({ sessionId, onSpecReady }: InterviewPageProps) {
     <div className={styles.page}>
       <AppHeader />
 
-      <FlowStepper current={1} />
+      <FlowStepper current={2} />
 
       <div className={styles.body}>
         <div className={styles.leftPanel}>

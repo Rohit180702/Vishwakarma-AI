@@ -3,10 +3,11 @@ File-based storage for per-session artefacts.
 
 Each session gets its own folder:
   data/sessions/{session_id}/
-    input.md         ← Docling-converted (or verbatim copy if already .md)
-    questions.json   ← Claude-generated interview questions (without answers)
-    answers.json     ← user's decisions, one object per answered question
-    hld.json         ← generated HLD document (written after generation)
+    input.md               ← Docling-converted (or verbatim copy if already .md)
+    characteristics.json   ← Detected architectural characteristics with priorities
+    questions.json         ← Claude-generated interview questions (without answers)
+    answers.json           ← user's decisions, one object per answered question
+    hld.json               ← generated HLD document (written after generation)
 """
 from __future__ import annotations
 
@@ -53,6 +54,21 @@ class SessionStorage:
     def read_input_md(self, session_id: str) -> str:
         p = self._path(session_id, "input.md")
         return p.read_text(encoding="utf-8") if p.exists() else ""
+
+    # ------------------------------------------------------------------
+    # characteristics.json — detected and prioritized characteristics
+    # ------------------------------------------------------------------
+
+    def write_characteristics(self, session_id: str, data: dict[str, Any]) -> None:
+        """Write characteristics data (includes metadata like detected_at)."""
+        p = self._path(session_id, "characteristics.json", create_dir=True)
+        self._write_json(p, data)
+
+    def read_characteristics(self, session_id: str) -> dict[str, Any]:
+        """Read characteristics data. Returns empty dict if not exists."""
+        p = self._path(session_id, "characteristics.json")
+        result = self._read_json(p)
+        return result if isinstance(result, dict) else {}
 
     # ------------------------------------------------------------------
     # questions.json — full question objects (without embedded answers)

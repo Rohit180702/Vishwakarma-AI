@@ -67,7 +67,7 @@ export function FormatSelection({ onSelected, onBack }: FormatSelectionProps) {
   return (
     <div className={styles.page}>
       <AppHeader />
-      <FlowStepper current={2} />
+      <FlowStepper current={3} />
 
       <div className={`${styles.body} ${selected ? styles.bodyPanelOpen : ''}`}>
 

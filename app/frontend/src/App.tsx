@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import type { HLDDocument, HLDTemplate, Section } from '@/types'
 import { SpecUpload } from '@/features/spec-upload/SpecUpload'
+import { CharacteristicsPage } from '@/features/characteristics'
 import { InterviewPage } from '@/features/interview/InterviewPage'
 import { FormatSelection } from '@/features/format-selection/FormatSelection'
 import { HLDOutput } from '@/features/hld-output'
@@ -71,7 +72,17 @@ export function App() {
         element={<SpecUpload onReady={handleSpecReady} onLoadSession={handleLoadSession} />}
       />
 
-      {/* Step 2 — Interview (requires uploaded spec + session) */}
+      {/* Step 2 — Characteristics Detection & Prioritization */}
+      <Route
+        path="/characteristics"
+        element={
+          specText && sessionId
+            ? <CharacteristicsPage />
+            : <Navigate to="/" replace />
+        }
+      />
+
+      {/* Step 3 — Interview (requires uploaded spec + session) */}
       <Route
         path="/interview"
         element={
