@@ -1,16 +1,11 @@
 /**
- * DiagramPanel — professional C4-style interactive architecture diagram viewer.
+ * DiagramPanel — C4 interactive diagram renderer.
  *
- * Rendering pipeline:
- *   Mermaid string → parser → React Flow + dagre layout (interactive, default)
- *   On parse failure or user toggle → mermaid.js SVG render (fallback)
- *
- * Interactions:
- *   - Click a node: highlights the node + its direct connections, dims everything else
- *   - Click node again / click canvas: resets to default view
- *   - Fullscreen button: enters browser fullscreen for presentation mode
+ * Click a node to highlight its full end-to-end flow (BFS upstream + downstream).
+ * A side panel slides in with node details and direct in/out connections.
+ * The viewport auto-zooms to fit the highlighted flow.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import {
   Background,
   BaseEdge,
@@ -22,19 +17,21 @@ import {
   ReactFlow,
   getSmoothStepPath,
   useNodesState,
+  useReactFlow,
   type Edge,
   type EdgeProps,
   type Node,
   type NodeTypes,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import dagre from '@dagrejs/dagre'
+import ELK from 'elkjs/lib/elk.bundled.js'
 import mermaid from 'mermaid'
-import type { C4Diagram, DiagramLevel } from '@/types'
+import type { C4Boundary, C4Diagram, C4Node, C4NodeType, C4Relationship, DiagramLevel } from '@/types'
+import { queryDiagram } from '@/api/client'
 import styles from './DiagramPanel.module.css'
 
 // ---------------------------------------------------------------------------
-// Mermaid init
+// Mermaid init (sequence diagrams only)
 // ---------------------------------------------------------------------------
 mermaid.initialize({
   startOnLoad: false,
@@ -45,322 +42,183 @@ mermaid.initialize({
     primaryTextColor: '#1E3A8A',
     lineColor: '#94A3B8',
     fontSize: '13px',
-    edgeLabelBackground: '#F8FAFC',
   },
-  flowchart: { htmlLabels: true, curve: 'basis', diagramPadding: 20 },
+  sequence: { diagramMarginX: 20, diagramMarginY: 20 },
 })
-
 let mermaidSeq = 0
 
 // ---------------------------------------------------------------------------
-// Utilities
+// C4 colour palette — professional muted tones
 // ---------------------------------------------------------------------------
-function decodeHtml(s: string): string {
-  return s
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
-}
-
-function truncate(s: string, max = 42): string {
-  const clean = decodeHtml(s).trim()
-  return clean.length > max ? clean.slice(0, max - 1) + '…' : clean
-}
-
-// ---------------------------------------------------------------------------
-// C4 colour palette
-// ---------------------------------------------------------------------------
-interface C4Palette {
+interface NodeStyle {
   headerBg: string
   headerText: string
   bodyBg: string
-  nameFg: string
   border: string
   minimap: string
-  label: string
-}
-
-const C4_PALETTE: Record<string, C4Palette> = {
-  person: {
-    headerBg: '#6D28D9',
-    headerText: '#FFFFFF',
-    bodyBg: '#F5F3FF',
-    nameFg: '#3B0764',
-    border: '#7C3AED',
-    minimap: '#7C3AED',
-    label: 'Person',
-  },
-  service: {
-    headerBg: '#1D4ED8',
-    headerText: '#FFFFFF',
-    bodyBg: '#EFF6FF',
-    nameFg: '#1E3A8A',
-    border: '#2563EB',
-    minimap: '#2563EB',
-    label: 'Container',
-  },
-  external: {
-    headerBg: '#475569',
-    headerText: '#FFFFFF',
-    bodyBg: '#F8FAFC',
-    nameFg: '#1E293B',
-    border: '#64748B',
-    minimap: '#64748B',
-    label: 'External',
-  },
-  database: {
-    headerBg: '#15803D',
-    headerText: '#FFFFFF',
-    bodyBg: '#F0FDF4',
-    nameFg: '#14532D',
-    border: '#16A34A',
-    minimap: '#16A34A',
-    label: 'Database',
-  },
-  queue: {
-    headerBg: '#B45309',
-    headerText: '#FFFFFF',
-    bodyBg: '#FFFBEB',
-    nameFg: '#451A03',
-    border: '#D97706',
-    minimap: '#D97706',
-    label: 'Queue / Bus',
-  },
-}
-
-// ---------------------------------------------------------------------------
-// Label parser — splits "Name\n[Type: Tech]" into parts
-// ---------------------------------------------------------------------------
-function parseLabel(raw: string): { name: string; badge: string } {
-  const decoded = decodeHtml(raw)
-  const lines = decoded.split('\n').map(l => l.trim()).filter(Boolean)
-  const badgeLines = lines.filter(l => l.startsWith('['))
-  const nameLines = lines.filter(l => !l.startsWith('['))
-  return {
-    name: nameLines[0] ?? lines[0] ?? '?',
-    badge: badgeLines[0] ?? '',
-  }
-}
-
-function detectNodeType(label: string, lineHint: string): string {
-  const lbl = label.toLowerCase()
-  if (lbl.includes('[person]') || lbl.includes('person]')) return 'person'
-  if (lbl.includes('[external') || lbl.includes('external system')) return 'external'
-  if (lbl.includes('[database') || lbl.includes('database]')) return 'database'
-  if (lbl.includes('[queue') || lbl.includes('queue]')) return 'queue'
-  if (lineHint.includes('[(')) return 'database'
-  if (lineHint.includes('[/')) return 'queue'
-  return 'service'
-}
-
-// ---------------------------------------------------------------------------
-// Mermaid → React Flow parser (two-pass, robust)
-// ---------------------------------------------------------------------------
-interface RFNodeData extends Record<string, unknown> {
-  name: string
   badge: string
-  nodeType: string
-  fullLabel: string
-  isSelected?: boolean
 }
 
-function parseMermaidToRF(
-  syntax: string,
-  diagramLevel: DiagramLevel,
-): { nodes: Node<RFNodeData>[]; edges: Edge[]; rankdir: 'LR' | 'TB' } | null {
-  try {
-    const lines = syntax.split('\n').map(l => l.trim()).filter(Boolean)
-    const nodeMap = new Map<string, { name: string; badge: string; nodeType: string; fullLabel: string }>()
-    const rawEdges: Array<{ src: string; tgt: string; label: string }> = []
-
-    const SKIP_RE = /^(flowchart|graph|subgraph|classDef|class |style |%%|direction )/i
-
-    const nodeDefRe = /([\w]+)\[(?:"([^"]*)"|\(["']([^"']*)["']\)|["']([^"']*)["']|([^\]]*?))\]/g
-    for (const line of lines) {
-      if (SKIP_RE.test(line) || line === 'end') continue
-      nodeDefRe.lastIndex = 0
-      let nm: RegExpExecArray | null
-      while ((nm = nodeDefRe.exec(line)) !== null) {
-        const id = nm[1]
-        const raw = (nm[2] ?? nm[3] ?? nm[4] ?? nm[5] ?? id).replace(/\\n/g, '\n').trim()
-        if (!nodeMap.has(id)) {
-          const { name, badge } = parseLabel(raw)
-          nodeMap.set(id, {
-            name,
-            badge,
-            nodeType: detectNodeType(raw, line),
-            fullLabel: raw,
-          })
-        }
-      }
-    }
-
-    const edgeSimple = /([\w]+)\s*--[->]+\s*(?:\|([^|]*)\|)?\s*([\w]+)/g
-    for (const line of lines) {
-      if (SKIP_RE.test(line) || line === 'end') continue
-      edgeSimple.lastIndex = 0
-      let em: RegExpExecArray | null
-      while ((em = edgeSimple.exec(line)) !== null) {
-        const src = em[1]
-        const tgt = em[3]
-        if (src === tgt) continue
-        const rawLabel = (em[2] ?? '').replace(/^["'\s]+|["'\s]+$/g, '').trim()
-        rawEdges.push({ src, tgt, label: decodeHtml(rawLabel) })
-        if (!nodeMap.has(src)) nodeMap.set(src, { name: src, badge: '', nodeType: 'service', fullLabel: src })
-        if (!nodeMap.has(tgt)) nodeMap.set(tgt, { name: tgt, badge: '', nodeType: 'service', fullLabel: tgt })
-      }
-    }
-
-    if (nodeMap.size === 0) return null
-
-    const nodeCount = nodeMap.size
-    const rankdir: 'LR' | 'TB' =
-      diagramLevel === 'component' || nodeCount > 10 ? 'TB' : 'LR'
-
-    const nodes: Node<RFNodeData>[] = [...nodeMap.entries()].map(([id, d]) => ({
-      id,
-      type: 'c4node',
-      position: { x: 0, y: 0 },
-      data: { name: d.name, badge: d.badge, nodeType: d.nodeType, fullLabel: d.fullLabel, isSelected: false },
-    }))
-
-    let ec = 0
-    const edges: Edge[] = rawEdges.map(({ src, tgt, label }) => ({
-      id: `e${ec++}`,
-      source: src,
-      target: tgt,
-      label,
-      type: 'c4edge',
-      animated: true,
-      markerEnd: { type: 'arrowclosed' as const, width: 14, height: 14, color: '#64748B' },
-      style: { stroke: '#94A3B8', strokeWidth: 1.5 },
-    }))
-
-    const g = new dagre.graphlib.Graph()
-    const nodeW = rankdir === 'LR' ? 210 : 220
-    const nodeH = 80
-    g.setGraph({
-      rankdir,
-      nodesep: rankdir === 'LR' ? 80 : 90,
-      ranksep: rankdir === 'LR' ? 200 : 120,
-      marginx: 80,
-      marginy: 80,
-      edgesep: 40,
-    })
-    g.setDefaultEdgeLabel(() => ({}))
-    nodes.forEach(n => g.setNode(n.id, { width: nodeW, height: nodeH }))
-    edges.forEach(e => g.setEdge(e.source, e.target))
-    dagre.layout(g)
-
-    const laidOut = nodes.map(n => {
-      const pos = g.node(n.id)
-      return { ...n, position: { x: pos.x - nodeW / 2, y: pos.y - nodeH / 2 } }
-    })
-
-    return { nodes: laidOut, edges, rankdir }
-  } catch (err) {
-    console.error('[DiagramPanel] parse error:', err)
-    return null
-  }
+// Colour psychology–driven palette:
+//  • Blue dominates — it is the most universally trusted, calm colour.
+//    Common elements (person, system, container, component) all live in
+//    the blue family so the canvas reads as stable and professional.
+//  • Accent colours (green, amber, violet, orange) are reserved for
+//    *rare* specialised node types so they read as highlights, not noise.
+//  • Body backgrounds are near-white tints so text always reads clearly.
+const NODE_STYLES: Record<C4NodeType, NodeStyle> = {
+  // Warm violet — human actors, clearly distinct from machine elements
+  person: {
+    headerBg: '#5B21B6', headerText: '#fff', bodyBg: '#FAF5FF',
+    border: '#A78BFA', minimap: '#A78BFA', badge: 'Person',
+  },
+  // Deep navy — the primary owned system (anchors the canvas)
+  system: {
+    headerBg: '#1E3A8A', headerText: '#fff', bodyBg: '#EFF6FF',
+    border: '#3B82F6', minimap: '#3B82F6', badge: 'Software System',
+  },
+  // Muted slate — third-party systems (visually recedes = "not ours")
+  external_system: {
+    headerBg: '#475569', headerText: '#fff', bodyBg: '#F8FAFC',
+    border: '#94A3B8', minimap: '#94A3B8', badge: 'External System',
+  },
+  // Ocean blue — deployable containers (most common node, stays in blue family)
+  container: {
+    headerBg: '#1D5FAD', headerText: '#fff', bodyBg: '#EFF6FF',
+    border: '#60A5FA', minimap: '#60A5FA', badge: 'Container',
+  },
+  // Sky blue — internal components (lighter = "inside" a container)
+  component: {
+    headerBg: '#0369A1', headerText: '#fff', bodyBg: '#F0F9FF',
+    border: '#7DD3FC', minimap: '#7DD3FC', badge: 'Component',
+  },
+  // Sage green (muted) — data at rest; green = data is a strong
+  // mental model but kept desaturated so it doesn't flood the canvas
+  database: {
+    headerBg: '#2D6A4F', headerText: '#fff', bodyBg: '#F0FDF4',
+    border: '#86EFAC', minimap: '#86EFAC', badge: 'Database',
+  },
+  // Warm amber — async / event messaging (heat = fire-and-forget)
+  queue: {
+    headerBg: '#92400E', headerText: '#fff', bodyBg: '#FFFBEB',
+    border: '#FCD34D', minimap: '#FCD34D', badge: 'Queue / Bus',
+  },
+  // Steel teal — fast cache (teal accent, rare enough to not dominate)
+  cache: {
+    headerBg: '#0E7490', headerText: '#fff', bodyBg: '#ECFEFF',
+    border: '#67E8F9', minimap: '#67E8F9', badge: 'Cache',
+  },
+  // Cobalt blue — frontend / UI (still blue family but distinct tone)
+  frontend: {
+    headerBg: '#1E40AF', headerText: '#fff', bodyBg: '#EEF2FF',
+    border: '#818CF8', minimap: '#818CF8', badge: 'Frontend',
+  },
+  // Rust orange — managed cloud infra (warm, recognisably external/infra)
+  cloud_service: {
+    headerBg: '#9A3412', headerText: '#fff', bodyBg: '#FFF7ED',
+    border: '#FCA863', minimap: '#FCA863', badge: 'Cloud Service',
+  },
 }
 
 // ---------------------------------------------------------------------------
-// Custom C4 Node — header badge + name body + selected ring
+// Custom C4 node
 // ---------------------------------------------------------------------------
-function C4Node({ data }: { data: RFNodeData }) {
-  const palette = C4_PALETTE[data.nodeType] ?? C4_PALETTE.service
+interface C4NodeData extends Record<string, unknown> {
+  label: string
+  description: string
+  technology: string
+  nodeType: C4NodeType
+  isSelected: boolean
+}
+
+function C4NodeComponent({ data }: { data: C4NodeData }) {
+  const s = NODE_STYLES[data.nodeType] ?? NODE_STYLES.system
+  const isDb = data.nodeType === 'database'
 
   return (
-    // outline is used for the selected ring — unlike boxShadow it is NOT clipped by overflow:hidden
     <div
-      className={styles.rfNode}
+      className={`${styles.rfNode} ${data.isSelected ? styles.rfNodeSelected : ''}`}
       style={{
-        borderColor: data.isSelected ? '#1D4ED8' : palette.border,
-        outline: data.isSelected ? `3px solid ${palette.border}` : 'none',
-        outlineOffset: '2px',
-        transform: data.isSelected ? 'scale(1.05)' : 'scale(1)',
-        transition: 'transform 0.15s ease, outline 0.15s ease, border-color 0.15s ease',
+        borderColor: s.border,
+        outlineColor: s.headerBg,
+        boxShadow: data.isSelected
+          ? `0 0 0 6px ${s.headerBg}20, 0 6px 24px ${s.headerBg}35`
+          : '0 1px 3px rgba(0,0,0,0.07)',
+        borderRadius: isDb ? '4px 4px 50% 50% / 4px 4px 8px 8px' : '6px',
       }}
     >
-      {/* Each handle needs a unique id when multiple handles of the same type exist */}
-      <Handle id="tl" type="target" position={Position.Left}
-        style={{ background: palette.border, border: `2px solid ${palette.bodyBg}` }}
-        className={styles.handle}
-      />
-      <Handle id="tt" type="target" position={Position.Top}
-        style={{ background: palette.border, border: `2px solid ${palette.bodyBg}` }}
-        className={styles.handle}
-      />
+      <Handle id="tl" type="target" position={Position.Left} className={styles.handle} style={{ background: s.border }} />
+      <Handle id="tt" type="target" position={Position.Top} className={styles.handle} style={{ background: s.border }} />
 
-      <div
-        className={styles.rfNodeHeader}
-        style={{ background: data.isSelected ? '#1D4ED8' : palette.headerBg, color: palette.headerText }}
-      >
-        {data.badge || (data.nodeType.charAt(0).toUpperCase() + data.nodeType.slice(1))}
+      <div className={styles.rfNodeHeader} style={{ background: s.headerBg, color: s.headerText }}>
+        {s.badge}
       </div>
 
-      <div className={styles.rfNodeBody} style={{ background: palette.bodyBg }}>
-        <span className={styles.rfNodeName} style={{ color: palette.nameFg }}>
-          {data.name}
-        </span>
+      <div className={styles.rfNodeBody} style={{ background: s.bodyBg }}>
+        <span className={styles.rfNodeName}>{data.label}</span>
+        {data.description && (
+          <span className={styles.rfNodeDesc}>{data.description}</span>
+        )}
+        {data.technology && (
+          <span
+            className={styles.rfNodeTech}
+            style={{ background: s.headerBg + '18', color: s.headerBg, borderColor: s.headerBg + '30' }}
+          >
+            {data.technology}
+          </span>
+        )}
       </div>
 
-      <Handle id="sr" type="source" position={Position.Right}
-        style={{ background: palette.border, border: `2px solid ${palette.bodyBg}` }}
-        className={styles.handle}
-      />
-      <Handle id="sb" type="source" position={Position.Bottom}
-        style={{ background: palette.border, border: `2px solid ${palette.bodyBg}` }}
-        className={styles.handle}
-      />
+      <Handle id="sr" type="source" position={Position.Right} className={styles.handle} style={{ background: s.border }} />
+      <Handle id="sb" type="source" position={Position.Bottom} className={styles.handle} style={{ background: s.border }} />
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Custom edge — truncated label with full tooltip
+// Boundary group node
+// ---------------------------------------------------------------------------
+interface BoundaryNodeData extends Record<string, unknown> {
+  label: string
+}
+
+function BoundaryNode({ data }: { data: BoundaryNodeData }) {
+  return (
+    <div className={styles.boundaryNode}>
+      <span className={styles.boundaryLabel}>{data.label}</span>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Custom edge — full label in focus mode, truncated otherwise
 // ---------------------------------------------------------------------------
 function C4Edge({
-  id,
-  sourceX,
-  sourceY,
-  targetX,
-  targetY,
-  sourcePosition,
-  targetPosition,
-  label,
-  markerEnd,
-  style,
+  id, sourceX, sourceY, targetX, targetY,
+  sourcePosition, targetPosition,
+  label, markerEnd, style, data,
 }: EdgeProps) {
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-    borderRadius: 6,
-    offset: 24,
+  const [path, lx, ly] = getSmoothStepPath({
+    sourceX, sourceY, sourcePosition,
+    targetX, targetY, targetPosition,
+    borderRadius: 12,
+    offset: 30,
   })
-
-  const rawLabel = typeof label === 'string' ? label : ''
-  const displayLabel = truncate(rawLabel, 36)
+  const raw = typeof label === 'string' ? label : ''
+  const focusMode = !!(data as Record<string, unknown>)?.focusMode
+  const display = (!focusMode && raw.length > 32) ? raw.slice(0, 31) + '…' : raw
 
   return (
     <>
-      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
-      {displayLabel && (
+      <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />
+      {display && (
         <EdgeLabelRenderer>
           <div
-            className={styles.edgeLabel}
-            title={rawLabel}
-            style={{ transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)` }}
+            className={`${styles.edgeLabel} ${focusMode ? styles.edgeLabelFocused : ''}`}
+            title={raw}
+            style={{ transform: `translate(-50%,-50%) translate(${lx}px,${ly}px)` }}
           >
-            {displayLabel}
+            {display}
           </div>
         </EdgeLabelRenderer>
       )}
@@ -368,193 +226,679 @@ function C4Edge({
   )
 }
 
-const nodeTypes: NodeTypes = { c4node: C4Node }
+const nodeTypes: NodeTypes = { c4node: C4NodeComponent, boundary: BoundaryNode }
 const edgeTypes = { c4edge: C4Edge }
 
 // ---------------------------------------------------------------------------
-// C4 Legend
+// JSON → React Flow layout via ELK (async, better hierarchical layout)
+// Flat layout: all nodes positioned by ELK, boundary boxes computed from
+// member node positions as background decorations (no compound nodes).
+// Async edges rendered with strokeDasharray dashes.
 // ---------------------------------------------------------------------------
-const LEGEND_ENTRIES = Object.entries(C4_PALETTE).map(([type, p]) => ({
-  type,
-  color: p.headerBg,
-  label: p.label,
-}))
+const NODE_W = 220
+const NODE_H = 100
+const BOUNDARY_PAD = 36
 
-function C4Legend() {
+const elk = new ELK()
+
+const ELK_OPTIONS = {
+  'elk.algorithm': 'layered',
+  'elk.direction': 'RIGHT',
+  // Moderate spacing — enough breathing room without sprawl
+  'elk.layered.spacing.nodeNodeBetweenLayers': '140',
+  'elk.spacing.nodeNode': '60',
+  'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+  'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+  // Break cycles without reversing model-defined directions
+  'elk.layered.cycleBreaking.strategy': 'MODEL_ORDER',
+  // ORTHOGONAL edge routing keeps edges rectilinear and easy to follow.
+  // React Flow renders the actual paths (getSmoothStepPath), but ORTHOGONAL
+  // hints tell ELK to place nodes such that orthogonal paths work well.
+  'elk.edgeRouting': 'ORTHOGONAL',
+  'elk.padding': '[top=50,left=50,bottom=50,right=50]',
+}
+
+type FlowResult = { nodes: Node[]; edges: Edge[] }
+
+async function buildFlow(
+  nodes: C4Node[],
+  relationships: C4Relationship[],
+  boundaries: C4Boundary[],
+): Promise<FlowResult> {
+  const validRels = relationships
+    .map(r => ({ ...r, _src: r.from_id ?? r.from, _tgt: r.to_id ?? r.to }))
+    .filter(r => r._src && r._tgt && r._src !== r._tgt)
+
+  const elkGraph = {
+    id: 'root',
+    layoutOptions: ELK_OPTIONS,
+    children: nodes.map(n => ({ id: n.id, width: NODE_W, height: NODE_H })),
+    edges: validRels.map((r, i) => ({
+      id: `elk-e${i}`,
+      sources: [r._src!],
+      targets: [r._tgt!],
+    })),
+  }
+
+  const result = await elk.layout(elkGraph)
+
+  // Build position map from ELK output
+  const posMap = new Map<string, { x: number; y: number }>()
+  for (const child of result.children ?? []) {
+    if (child.id) posMap.set(child.id, { x: child.x ?? 0, y: child.y ?? 0 })
+  }
+
+  // Compute boundary bounding boxes from laid-out node positions
+  const boundaryBoxes = new Map<string, { x: number; y: number; w: number; h: number; label: string }>()
+  for (const b of boundaries) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const nid of b.node_ids) {
+      const pos = posMap.get(nid)
+      if (!pos) continue
+      minX = Math.min(minX, pos.x)
+      minY = Math.min(minY, pos.y)
+      maxX = Math.max(maxX, pos.x + NODE_W)
+      maxY = Math.max(maxY, pos.y + NODE_H)
+    }
+    if (minX < Infinity) {
+      boundaryBoxes.set(b.id, {
+        x: minX - BOUNDARY_PAD,
+        y: minY - BOUNDARY_PAD - 20,
+        w: maxX - minX + BOUNDARY_PAD * 2,
+        h: maxY - minY + BOUNDARY_PAD * 2 + 20,
+        label: b.label,
+      })
+    }
+  }
+
+  const rfNodes: Node[] = []
+
+  for (const [bid, box] of boundaryBoxes) {
+    rfNodes.push({
+      id: `__boundary__${bid}`,
+      type: 'boundary',
+      position: { x: box.x, y: box.y },
+      style: { width: box.w, height: box.h, pointerEvents: 'none' },
+      data: { label: box.label } as BoundaryNodeData,
+      draggable: false, selectable: false, focusable: false, zIndex: 0,
+    })
+  }
+
+  for (const n of nodes) {
+    const pos = posMap.get(n.id)
+    if (!pos) continue
+    rfNodes.push({
+      id: n.id,
+      type: 'c4node',
+      position: pos,
+      data: {
+        label: n.label,
+        description: n.description ?? '',
+        technology: n.technology ?? '',
+        nodeType: n.type,
+        isSelected: false,
+      } as C4NodeData,
+      zIndex: 2,
+    })
+  }
+
+  let ec = 0
+  const edgeLabel = (r: C4Relationship) =>
+    [r.label, r.technology].filter(Boolean).join(' · ')
+  const isAsync = (r: C4Relationship) => !!(r.async_comm ?? r.async)
+
+  const rfEdges: Edge[] = validRels.map(r => ({
+    id: `e${ec++}`,
+    source: r._src!,
+    target: r._tgt!,
+    label: edgeLabel(r),
+    type: 'c4edge',
+    animated: false,
+    data: { focusMode: false, isAsync: isAsync(r) },
+    markerEnd: { type: 'arrowclosed' as const, width: 14, height: 14, color: '#94A3B8' },
+    style: {
+      stroke: '#94A3B8',
+      strokeWidth: 1.5,
+      strokeDasharray: isAsync(r) ? '7 4' : undefined,
+    },
+  }))
+
+  return { nodes: rfNodes, edges: rfEdges }
+}
+
+// ---------------------------------------------------------------------------
+// FlowController — auto pan+zoom when flow selection changes
+// Must be rendered inside <ReactFlow> provider
+// ---------------------------------------------------------------------------
+function FlowController({
+  flowIds,
+}: {
+  flowIds: Set<string> | null
+}) {
+  const { fitView } = useReactFlow()
+
+  // Only fit-to-view when the flow selection first appears (flowIds changes from null).
+  // We do NOT zoom on every step change — the highlight is the visual cue.
+  const prevRef = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    const wasNull = prevRef.current === null
+    prevRef.current = flowIds
+    if (!flowIds || !wasNull) return   // only fire on null → set transition
+    const nodeIds = [...flowIds].map(id => ({ id }))
+    const t = setTimeout(() => {
+      fitView({ nodes: nodeIds, padding: 0.22, duration: 520, minZoom: 0.15, maxZoom: 2 })
+    }, 60)
+    return () => clearTimeout(t)
+  }, [flowIds, fitView])
+
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// Side panel — node detail + incoming/outgoing connections
+// ---------------------------------------------------------------------------
+interface SidePanelProps {
+  selectedId: string
+  c4nodes: C4Node[]
+  c4rels: C4Relationship[]
+  nodeNames: Map<string, string>
+  onClose: () => void
+}
+
+function FlowSidePanel({ selectedId, c4nodes, c4rels, nodeNames, onClose }: SidePanelProps) {
+  const node = c4nodes.find(n => n.id === selectedId)
+  if (!node) return null
+
+  const s = NODE_STYLES[node.type] ?? NODE_STYLES.system
+
+  const incoming = c4rels.filter(r => (r.to_id ?? r.to) === selectedId)
+  const outgoing = c4rels.filter(r => (r.from_id ?? r.from) === selectedId)
+
   return (
-    <div className={styles.legend}>
-      {LEGEND_ENTRIES.map(({ type, color, label }) => (
-        <div key={type} className={styles.legendItem}>
-          <span className={styles.legendDot} style={{ background: color }} />
-          <span className={styles.legendLabel}>{label}</span>
+    <div className={styles.sidePanel}>
+      <div className={styles.sidePanelTop}>
+        <div className={styles.sidePanelBadge} style={{ background: s.headerBg, color: '#fff' }}>
+          {s.badge}
         </div>
-      ))}
+        <button className={styles.sidePanelClose} onClick={onClose} title="Close (or click node again)">✕</button>
+      </div>
+
+      <div className={styles.sidePanelName}>{node.label}</div>
+
+      {node.description && (
+        <div className={styles.sidePanelDesc}>{node.description}</div>
+      )}
+
+      {node.technology && (
+        <span
+          className={styles.sidePanelTech}
+          style={{ background: s.headerBg + '15', color: s.headerBg, borderColor: s.headerBg + '30' }}
+        >
+          {node.technology}
+        </span>
+      )}
+
+      <div className={styles.sidePanelDivider} />
+
+      {incoming.length > 0 && (
+        <div className={styles.sidePanelSection}>
+          <div className={styles.sidePanelSectionTitle}>
+            <span className={styles.sidePanelArrow} style={{ color: s.headerBg }}>→</span>
+            Incoming
+          </div>
+          {incoming.map((r, i) => {
+            const fromId = r.from_id ?? r.from
+            const fromName = fromId ? (nodeNames.get(fromId) ?? fromId) : '?'
+            const relLabel = [r.label, r.technology].filter(Boolean).join(' · ')
+            return (
+              <div key={i} className={styles.sidePanelRel}>
+                <span className={styles.sidePanelRelNode}>{fromName}</span>
+                {relLabel && <span className={styles.sidePanelRelLabel}>{relLabel}</span>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {outgoing.length > 0 && (
+        <div className={styles.sidePanelSection}>
+          <div className={styles.sidePanelSectionTitle}>
+            <span className={styles.sidePanelArrow} style={{ color: s.headerBg }}>→</span>
+            Outgoing
+          </div>
+          {outgoing.map((r, i) => {
+            const toId = r.to_id ?? r.to
+            const toName = toId ? (nodeNames.get(toId) ?? toId) : '?'
+            const relLabel = [r.label, r.technology].filter(Boolean).join(' · ')
+            return (
+              <div key={i} className={styles.sidePanelRel}>
+                <span className={styles.sidePanelRelNode}>{toName}</span>
+                {relLabel && <span className={styles.sidePanelRelLabel}>{relLabel}</span>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {incoming.length === 0 && outgoing.length === 0 && (
+        <div className={styles.sidePanelEmpty}>No direct connections found</div>
+      )}
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Interactive React Flow diagram
+// BFS helpers
 // ---------------------------------------------------------------------------
-function RFDiagram({
+
+/**
+ * depth=1  → only direct neighbours (1-hop)
+ * depth=Infinity → full upstream + downstream traversal
+ *
+ * Forward and backward passes use SEPARATE visited sets so a node that is
+ * both downstream AND an upstream intermediary (e.g. a message bus) is
+ * correctly traversed in both directions.
+ */
+function computeFlowIds(
+  selectedId: string,
+  edges: Edge[],
+  depth: number,
+): Set<string> {
+  const ids = new Set([selectedId])
+
+  // forward (downstream)
+  const fwdSeen = new Set([selectedId])
+  let fwdFrontier = [selectedId]
+  for (let d = 0; d < depth && fwdFrontier.length; d++) {
+    const next: string[] = []
+    for (const cur of fwdFrontier) {
+      for (const e of edges) {
+        if (e.source === cur && !fwdSeen.has(e.target)) {
+          fwdSeen.add(e.target); ids.add(e.target); next.push(e.target)
+        }
+      }
+    }
+    fwdFrontier = next
+  }
+
+  // backward (upstream)
+  const revSeen = new Set([selectedId])
+  let revFrontier = [selectedId]
+  for (let d = 0; d < depth && revFrontier.length; d++) {
+    const next: string[] = []
+    for (const cur of revFrontier) {
+      for (const e of edges) {
+        if (e.target === cur && !revSeen.has(e.source)) {
+          revSeen.add(e.source); ids.add(e.source); next.push(e.source)
+        }
+      }
+    }
+    revFrontier = next
+  }
+
+  return ids
+}
+
+// ---------------------------------------------------------------------------
+// Interactive React Flow canvas
+// ---------------------------------------------------------------------------
+function RFCanvas({
   nodes: initNodes,
   edges: initEdges,
-  onShowSVG,
+  c4nodes,
+  c4rels,
+  diagram,
 }: {
-  nodes: Node<RFNodeData>[]
+  nodes: Node[]
   edges: Edge[]
-  onShowSVG: () => void
+  c4nodes: C4Node[]
+  c4rels: C4Relationship[]
+  diagram: C4Diagram
 }) {
   const [nodes, , onNodesChange] = useNodesState(initNodes)
-  // Edges are layout-only (no drag) — keep as plain memo to avoid React Flow feedback loop
   const baseEdges = useMemo(() => initEdges, [initEdges])
-
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  /**
-   * Compute the "flow path" through the selected node:
-   *   - ancestors: follow edges BACKWARDS from the selected node to the root(s)
-   *   - descendants: follow edges FORWARDS from the selected node to the leaves
-   *   - union = the end-to-end chain that passes through this node
-   *
-   * Everything outside this set is dimmed, making the path clearly visible.
-   */
+  // Conversational step-through query state
+  const [queryText, setQueryText] = useState('')
+  const [queryLoading, setQueryLoading] = useState(false)
+  const [querySteps, setQuerySteps] = useState<{ node_id: string; explanation: string }[] | null>(null)
+  const [stepIndex, setStepIndex] = useState(0)
+  const [, startTransition] = useTransition()
+
+  const handleQuery = useCallback(async () => {
+    const q = queryText.trim()
+    if (!q || queryLoading) return
+    setQueryLoading(true)
+    setQuerySteps(null)
+    setStepIndex(0)
+    setSelectedId(null)
+    try {
+      const result = await queryDiagram(q, {
+        level: diagram.level,
+        title: diagram.title,
+        nodes: c4nodes.map(n => ({ id: n.id, type: n.type, label: n.label, description: n.description, technology: n.technology })),
+        relationships: c4rels.map(r => ({ from: r.from_id ?? r.from, to: r.to_id ?? r.to, label: r.label, technology: r.technology })),
+      })
+      startTransition(() => {
+        setQuerySteps(result.steps?.length ? result.steps : null)
+        setStepIndex(0)
+      })
+    } catch {
+      setQuerySteps(null)
+    } finally {
+      setQueryLoading(false)
+    }
+  }, [queryText, queryLoading, diagram, c4nodes, c4rels])
+
+  // Simulation mode — auto-advance every 3 s
+  const [isSimulating, setIsSimulating] = useState(false)
+  const [simProgress, setSimProgress] = useState(0)  // 0–100 for the progress bar
+  const simIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const simTickRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const SIM_DURATION = 3000
+
+  const stopSim = useCallback(() => {
+    setIsSimulating(false)
+    setSimProgress(0)
+    if (simIntervalRef.current) { clearInterval(simIntervalRef.current); simIntervalRef.current = null }
+    if (simTickRef.current)     { clearInterval(simTickRef.current);     simTickRef.current = null }
+  }, [])
+
+  // When simulation is active, advance step every SIM_DURATION ms
+  useEffect(() => {
+    if (!isSimulating || !querySteps) return
+    setSimProgress(0)
+    // smooth progress bar ticks every 50ms
+    simTickRef.current = setInterval(() => {
+      setSimProgress(p => Math.min(100, p + (50 / SIM_DURATION) * 100))
+    }, 50)
+    simIntervalRef.current = setInterval(() => {
+      setStepIndex(i => {
+        const next = i + 1
+        if (next >= (querySteps?.length ?? 0)) { stopSim(); return i }
+        setSimProgress(0)
+        return next
+      })
+    }, SIM_DURATION)
+    return () => {
+      if (simIntervalRef.current) clearInterval(simIntervalRef.current)
+      if (simTickRef.current)     clearInterval(simTickRef.current)
+    }
+  }, [isSimulating, querySteps, stopSim])
+
+  // Stop simulation if user manually navigates
+  const clearQuery = useCallback(() => {
+    stopSim()
+    setQuerySteps(null)
+    setStepIndex(0)
+    setQueryText('')
+  }, [stopSim])
+
+  const stepPrev = useCallback(() => { stopSim(); setStepIndex(i => Math.max(0, i - 1)) }, [stopSim])
+  const stepNext = useCallback(() => { stopSim(); setStepIndex(i => Math.min((querySteps?.length ?? 1) - 1, i + 1)) }, [stopSim, querySteps])
+
+  const toggleSim = useCallback(() => {
+    if (isSimulating) stopSim()
+    else { setSimProgress(0); setIsSimulating(true) }
+  }, [isSimulating, stopSim])
+
+  // Current step's node id and its style
+  const currentStepNodeId = querySteps?.[stepIndex]?.node_id ?? null
+  const currentStepNode = currentStepNodeId ? c4nodes.find(n => n.id === currentStepNodeId) : null
+  const currentStepStyle = currentStepNode ? NODE_STYLES[currentStepNode.type] : null
+
+  const nodeNames = useMemo(
+    () => new Map(c4nodes.map(n => [n.id, n.label])),
+    [c4nodes],
+  )
+
+  // In step-through mode, all nodes in the full flow are "known" but
+  // only nodes up to and including the current step are in-trail.
+  const allStepIds = useMemo(
+    () => querySteps ? new Set(querySteps.map(s => s.node_id)) : null,
+    [querySteps],
+  )
+  const trailIds = useMemo(
+    () => querySteps ? new Set(querySteps.slice(0, stepIndex + 1).map(s => s.node_id)) : null,
+    [querySteps, stepIndex],
+  )
+
+  // Click selection falls back to full BFS traversal when no query active
   const flowIds = useMemo(() => {
-    if (!selectedNodeId) return null
+    if (allStepIds) return allStepIds
+    if (!selectedId) return null
+    return computeFlowIds(selectedId, baseEdges, Infinity)
+  }, [selectedId, baseEdges, allStepIds])
 
-    const ids = new Set<string>([selectedNodeId])
+  // Selected node meta for toolbar
+  const selectedNode = useMemo(
+    () => c4nodes.find(n => n.id === selectedId),
+    [c4nodes, selectedId],
+  )
+  const selectedNodeStyle = selectedNode ? NODE_STYLES[selectedNode.type] : null
 
-    // Forward BFS — follow outgoing edges (what this node drives/calls)
-    const fwdQueue = [selectedNodeId]
-    while (fwdQueue.length > 0) {
-      const cur = fwdQueue.shift()!
-      for (const e of baseEdges) {
-        if (e.source === cur && !ids.has(e.target)) {
-          ids.add(e.target)
-          fwdQueue.push(e.target)
-        }
-      }
-    }
+  // Direct incoming/outgoing counts for toolbar info
+  const directCounts = useMemo(() => {
+    if (!selectedId) return null
+    const out = c4rels.filter(r => (r.from_id ?? r.from) === selectedId).length
+    const inp = c4rels.filter(r => (r.to_id ?? r.to) === selectedId).length
+    return { out, inp }
+  }, [selectedId, c4rels])
 
-    // Reverse BFS — follow incoming edges (what triggers/calls this node)
-    const revQueue = [selectedNodeId]
-    while (revQueue.length > 0) {
-      const cur = revQueue.shift()!
-      for (const e of baseEdges) {
-        if (e.target === cur && !ids.has(e.source)) {
-          ids.add(e.source)
-          revQueue.push(e.source)
-        }
-      }
-    }
-
-    return ids
-  }, [selectedNodeId, baseEdges])
-
-  // Nodes: highlight the flow path, dim everything outside it
   const viewNodes = useMemo(() => {
+    // Step-through mode: 3 tiers — current (full), trail (60%), future/out (12%)
+    if (querySteps && allStepIds) {
+      return nodes.map(n => {
+        if (n.type === 'boundary') return { ...n, style: { ...n.style, opacity: 0.4 } }
+        const isCurrent = n.id === currentStepNodeId
+        const isTrail = trailIds!.has(n.id) && !isCurrent
+        const inFlow = allStepIds.has(n.id)
+        const opacity = isCurrent ? 1 : isTrail ? 0.55 : inFlow ? 0.2 : 0.1
+        return {
+          ...n,
+          data: { ...n.data, isSelected: isCurrent },
+          style: {
+            ...n.style,
+            opacity,
+            transition: 'opacity 0.3s ease',
+          },
+          zIndex: isCurrent ? 10 : isTrail ? 4 : inFlow ? 2 : 1,
+        }
+      })
+    }
+    // Click/BFS mode
     if (!flowIds) {
-      // Deselect: explicitly clear style + zIndex so no stale dim remains
       return nodes.map(n => ({
         ...n,
         data: { ...n.data, isSelected: false },
-        style: { opacity: 1, filter: 'none', pointerEvents: 'all' as React.CSSProperties['pointerEvents'] },
-        zIndex: 1,
+        style: { ...n.style, opacity: 1 },
       }))
     }
     return nodes.map(n => {
+      if (n.type === 'boundary') return { ...n, style: { ...n.style, opacity: 0.5 } }
       const inFlow = flowIds.has(n.id)
       return {
         ...n,
-        data: { ...n.data, isSelected: n.id === selectedNodeId },
+        data: { ...n.data, isSelected: n.id === selectedId },
         style: {
-          opacity: inFlow ? 1 : 0.06,
-          transition: 'opacity 0.25s ease, filter 0.25s ease',
-          filter: inFlow ? 'none' : 'grayscale(1) blur(0.5px)',
-          pointerEvents: (inFlow ? 'all' : 'none') as React.CSSProperties['pointerEvents'],
+          ...n.style,
+          opacity: inFlow ? 1 : 0.18,
+          transition: 'opacity 0.22s ease',
         },
-        zIndex: n.id === selectedNodeId ? 10 : inFlow ? 5 : 0,
+        zIndex: n.id === selectedId ? 10 : inFlow ? 5 : 1,
       }
     })
-  }, [nodes, flowIds, selectedNodeId])
+  }, [nodes, flowIds, selectedId, querySteps, allStepIds, trailIds, currentStepNodeId])
 
-  // Edges: animate + highlight edges that are part of the flow path
   const viewEdges = useMemo(() => {
     if (!flowIds) return baseEdges
     return baseEdges.map(e => {
       const inFlow = flowIds.has(e.source) && flowIds.has(e.target)
-      const isDirect = e.source === selectedNodeId || e.target === selectedNodeId
+      const isDirect = e.source === selectedId || e.target === selectedId
+      const sourceNode = c4nodes.find(n => n.id === e.source)
+      const highlightColor = sourceNode ? (NODE_STYLES[sourceNode.type]?.border ?? '#3B82F6') : '#3B82F6'
+      const edgeData = (e.data as Record<string, unknown>) ?? {}
+      const isAsync = !!(edgeData.isAsync)
       return {
         ...e,
+        // Animate highlighted edges to show data flow direction;
+        // async edges keep their dash pattern on top of the animation
         animated: inFlow,
+        data: { ...edgeData, focusMode: inFlow },
         style: {
           ...e.style,
-          opacity: inFlow ? 1 : 0.04,
-          stroke: isDirect ? '#1D4ED8' : '#94A3B8',
-          strokeWidth: isDirect ? 2.5 : 1.5,
-          transition: 'opacity 0.2s ease',
+          opacity: inFlow ? 1 : 0.07,
+          stroke: inFlow ? (isDirect ? highlightColor : '#6B8FAF') : '#CBD5E1',
+          strokeWidth: isDirect ? 3 : inFlow ? 2.5 : 1.5,
+          // Keep dashes for async edges even when animated so the style is preserved
+          strokeDasharray: isAsync ? '7 4' : undefined,
+          transition: 'opacity 0.22s ease, stroke 0.2s ease, stroke-width 0.2s ease',
         },
         markerEnd: {
           ...(typeof e.markerEnd === 'object' ? e.markerEnd : {}),
-          color: isDirect ? '#1D4ED8' : '#64748B',
+          color: inFlow ? (isDirect ? highlightColor : '#6B8FAF') : '#CBD5E1',
         } as Edge['markerEnd'],
       }
     })
-  }, [baseEdges, flowIds, selectedNodeId])
-
-  // Show selected node label in toolbar so user can confirm click registered
-  const selectedNodeName = useMemo(() => {
-    if (!selectedNodeId) return null
-    return initNodes.find(n => n.id === selectedNodeId)?.data.name ?? selectedNodeId
-  }, [selectedNodeId, initNodes])
-
-  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    setSelectedNodeId(prev => (prev === node.id ? null : node.id))
-  }, [])
-
-  const onPaneClick = useCallback(() => setSelectedNodeId(null), [])
+  }, [baseEdges, flowIds, selectedId, c4nodes])
 
   const toggleFullscreen = useCallback(() => {
     if (!containerRef.current) return
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().catch(console.warn)
-    } else {
-      document.exitFullscreen().catch(console.warn)
-    }
+    if (!document.fullscreenElement) containerRef.current.requestFullscreen().catch(console.warn)
+    else document.exitFullscreen().catch(console.warn)
   }, [])
 
   useEffect(() => {
-    const onChange = () => setIsFullscreen(!!document.fullscreenElement)
-    document.addEventListener('fullscreenchange', onChange)
-    return () => document.removeEventListener('fullscreenchange', onChange)
+    const fn = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', fn)
+    return () => document.removeEventListener('fullscreenchange', fn)
   }, [])
+
+  // Keyboard navigation for step-through mode (Space = sim toggle)
+  useEffect(() => {
+    if (!querySteps) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); stepNext() }
+      if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   { e.preventDefault(); stepPrev() }
+      if (e.key === ' ')  { e.preventDefault(); toggleSim() }
+      if (e.key === 'Escape') clearQuery()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [querySteps, stepNext, stepPrev, clearQuery, toggleSim])
+
+  const totalC4Nodes = initNodes.filter(n => n.type === 'c4node').length
+  const flowCount = flowIds ? [...flowIds].filter(id => !id.startsWith('__boundary__')).length : 0
 
   return (
     <div className={styles.rfContainer} ref={containerRef}>
-      {/* Toolbar */}
+      {/* Toolbar — step-through mode vs idle/click mode */}
       <div className={styles.rfToolbar}>
-        <span className={styles.rfHint}>
-          {selectedNodeId
-            ? `"${selectedNodeName}" — ${flowIds?.size ?? 1} of ${initNodes.length} nodes in flow · click again or canvas to reset`
-            : 'Click any node to highlight its end-to-end flow path'}
-        </span>
-        <div className={styles.rfActions}>
-          <button className={styles.actionBtn} onClick={onShowSVG} title="View raw Mermaid SVG">
-            SVG
-          </button>
-          <button
-            className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
-            onClick={toggleFullscreen}
-            title={isFullscreen ? 'Exit fullscreen' : 'Presentation mode (fullscreen)'}
-          >
-            {isFullscreen ? '✕ Exit' : '⛶ Present'}
-          </button>
-        </div>
+        {querySteps && currentStepNode && currentStepStyle ? (
+          /* Step-through mode: step info + sim/manual controls */
+          <>
+            {/* Progress bar for simulation mode */}
+            {isSimulating && (
+              <div className={styles.simProgressBar}>
+                <div className={styles.simProgressFill} style={{ width: `${simProgress}%`, background: currentStepStyle.headerBg }} />
+              </div>
+            )}
+            <div className={styles.stepInfo}>
+              <span className={styles.stepCount}>{stepIndex + 1} / {querySteps.length}</span>
+              <span className={styles.stepBadge} style={{ background: currentStepStyle.headerBg, color: '#fff' }}>
+                {currentStepStyle.badge}
+              </span>
+              <span className={styles.stepNodeName}>{currentStepNode.label}</span>
+              <span className={styles.stepExplanation}>{querySteps[stepIndex].explanation}</span>
+            </div>
+            <div className={styles.rfToolbarActions}>
+              <button
+                className={styles.stepNavBtn}
+                onClick={stepPrev}
+                disabled={stepIndex === 0 || isSimulating}
+                title="Previous (← arrow)"
+              >←</button>
+              <button
+                className={`${styles.stepNavBtn} ${styles.stepNavBtnNext}`}
+                onClick={stepNext}
+                disabled={stepIndex === querySteps.length - 1 || isSimulating}
+                title="Next (→ arrow)"
+              >→</button>
+              {/* Simulation toggle */}
+              <button
+                className={`${styles.simBtn} ${isSimulating ? styles.simBtnActive : ''}`}
+                onClick={toggleSim}
+                title={isSimulating ? 'Pause simulation (Space)' : 'Auto-play simulation (Space)'}
+              >
+                {isSimulating ? '⏸' : '▶'}
+              </button>
+              <button className={styles.actionBtn} onClick={clearQuery} title="Exit walkthrough (Esc)">✕</button>
+              <button className={`${styles.actionBtn} ${styles.actionBtnPrimary}`} onClick={toggleFullscreen}>
+                {isFullscreen ? '✕ Exit' : '⛶ Present'}
+              </button>
+            </div>
+          </>
+        ) : selectedId && selectedNode && selectedNodeStyle ? (
+          /* Click/BFS mode: node info */
+          <>
+            <div className={styles.rfNodeInfo}>
+              <span className={styles.rfNodeInfoBadge} style={{ background: selectedNodeStyle.headerBg, color: '#fff' }}>
+                {selectedNodeStyle.badge}
+              </span>
+              <span className={styles.rfNodeInfoName}>{selectedNode.label}</span>
+              {directCounts && (
+                <span className={styles.rfNodeInfoCounts}>
+                  {directCounts.inp > 0 && <span>← {directCounts.inp} in</span>}
+                  {directCounts.out > 0 && <span>→ {directCounts.out} out</span>}
+                </span>
+              )}
+              {flowCount > 1 && (
+                <span className={styles.rfNodeInfoFlow}>{flowCount} nodes in flow</span>
+              )}
+            </div>
+            <div className={styles.rfToolbarActions}>
+              <button className={styles.actionBtn} onClick={() => setSelectedId(null)}>✕ Clear</button>
+              <button className={`${styles.actionBtn} ${styles.actionBtnPrimary}`} onClick={toggleFullscreen}>
+                {isFullscreen ? '✕ Exit' : '⛶ Present'}
+              </button>
+            </div>
+          </>
+        ) : (
+          /* Idle — query input lives here */
+          <>
+            <div className={styles.toolbarQuery}>
+              <input
+                className={styles.toolbarQueryInput}
+                type="text"
+                placeholder={`Ask about a flow… e.g. "How does ticket booking happen?"`}
+                value={queryText}
+                onChange={e => setQueryText(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleQuery()}
+                disabled={queryLoading}
+              />
+              <button
+                className={`${styles.toolbarQueryBtn} ${queryLoading ? styles.queryBtnLoading : ''}`}
+                onClick={handleQuery}
+                disabled={queryLoading || !queryText.trim()}
+                title="Ask"
+              >
+                {queryLoading ? <span className={styles.querySpinner} /> : '→'}
+              </button>
+            </div>
+            <div className={styles.rfToolbarActions}>
+              <button className={`${styles.actionBtn} ${styles.actionBtnPrimary}`} onClick={toggleFullscreen}>
+                {isFullscreen ? '✕ Exit' : '⛶ Present'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* React Flow canvas */}
+      {/* Canvas — full width, no side panel */}
       <div className={styles.rfCanvas}>
         <ReactFlow
           nodes={viewNodes}
@@ -562,127 +906,170 @@ function RFDiagram({
           onNodesChange={onNodesChange}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          onNodeClick={onNodeClick}
-          onPaneClick={onPaneClick}
+          onNodeClick={(_, node) => {
+            if (node.type !== 'c4node') return
+            setSelectedId(prev => prev === node.id ? null : node.id)
+          }}
+          onPaneClick={() => setSelectedId(null)}
           fitView
-          fitViewOptions={{ padding: 0.22, includeHiddenNodes: false }}
-          minZoom={0.15}
+          fitViewOptions={{ padding: 0.18 }}
+          minZoom={0.08}
           maxZoom={3}
           proOptions={{ hideAttribution: true }}
           defaultEdgeOptions={{
             type: 'c4edge',
-            animated: true,
+            animated: false,
             style: { stroke: '#94A3B8', strokeWidth: 1.5 },
-            markerEnd: { type: 'arrowclosed', width: 14, height: 14, color: '#64748B' },
+            markerEnd: { type: 'arrowclosed', width: 14, height: 14, color: '#94A3B8' },
           }}
         >
-          <Background color="#E2E8F0" gap={24} />
+          <FlowController flowIds={flowIds} />
+          <Background color="#BFCFE8" gap={24} size={1.2} />
           <Controls showInteractive={false} />
           <MiniMap
-            nodeColor={n => C4_PALETTE[(n.data as RFNodeData).nodeType]?.minimap ?? '#94A3B8'}
-            maskColor="rgba(248,250,252,0.8)"
+            nodeColor={n => NODE_STYLES[(n.data as C4NodeData)?.nodeType]?.minimap ?? '#8A9AB0'}
+            maskColor="rgba(248,250,252,0.85)"
             style={{ border: '1px solid #E2E8F0', borderRadius: 6 }}
           />
         </ReactFlow>
       </div>
 
       {/* Legend */}
-      <C4Legend />
+      <div className={styles.legend}>
+        {(Object.entries(NODE_STYLES) as [C4NodeType, NodeStyle][]).map(([type, s]) => (
+          <div key={type} className={styles.legendItem}>
+            <span className={styles.legendDot} style={{ background: s.headerBg }} />
+            <span className={styles.legendLabel}>{s.badge}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Mermaid SVG fallback
+// Mermaid SVG — for sequence diagrams
 // ---------------------------------------------------------------------------
-function MermaidSVG({ syntax, onShowInteractive }: { syntax: string; onShowInteractive?: () => void }) {
-  const containerRef = useRef<HTMLDivElement>(null)
+
+/** Remove any orphaned Mermaid sandbox containers Mermaid v11 may leave in <body>. */
+function purgeMermaidArtifacts(id: string) {
+  for (const sel of [`#d${id}`, `#${id}`, `[id^="mermaid-"]`]) {
+    document.querySelectorAll(sel).forEach(el => {
+      // Only remove if it's a direct child of body (Mermaid's sandbox pattern)
+      if (el.parentElement === document.body) el.remove()
+    })
+  }
+}
+
+function MermaidSVG({ syntax }: { syntax: string }) {
+  const ref = useRef<HTMLDivElement>(null)
   const [error, setError] = useState(false)
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    const id = `mermaid-svg-${++mermaidSeq}`
-    setError(false)
-    setReady(false)
-    if (!containerRef.current) return
+    const id = `mermaid-${++mermaidSeq}`
+    setError(false); setReady(false)
+    if (!ref.current) return
+    let cancelled = false
 
-    mermaid
-      .render(id, syntax)
-      .then(({ svg }) => {
-        if (!containerRef.current) return
-        const processed = svg
+    // Pre-validate with parse() so render() is never called for bad syntax.
+    // Mermaid v11 injects error elements into document.body when render() fails,
+    // which appear as page-level overlays. parse() is safe — it throws without
+    // touching the DOM.
+    mermaid.parse(syntax)
+      .then(() => {
+        if (cancelled) return
+        return mermaid.render(id, syntax)
+      })
+      .then(result => {
+        if (!result || cancelled || !ref.current) return
+        const { svg } = result
+        // Belt-and-suspenders: guard against Mermaid resolving with error SVG
+        if (svg.includes('Syntax error') || svg.includes('class="error-icon"')) {
+          setError(true)
+          return
+        }
+        ref.current.innerHTML = svg
           .replace(/\s+width="[^"]*"/, ' width="100%"')
           .replace(/\s+height="[^"]*"/, '')
-        containerRef.current.innerHTML = processed
-        const svgEl = containerRef.current.querySelector('svg')
-        if (svgEl) {
-          svgEl.style.cssText = 'width:100%;height:auto;max-width:100%;display:block;'
-          svgEl.removeAttribute('height')
+        const el = ref.current.querySelector('svg')
+        if (el) {
+          el.style.cssText = 'width:100%;height:auto;max-width:100%;display:block;'
+          el.removeAttribute('height')
         }
         setReady(true)
       })
-      .catch(err => {
-        console.warn('[DiagramPanel] Mermaid render error:', err)
-        setError(true)
+      .catch(() => {
+        if (!cancelled) setError(true)
       })
+      .finally(() => {
+        // Clean up any sandbox artifacts Mermaid may have left in <body>
+        purgeMermaidArtifacts(id)
+      })
+
+    return () => {
+      cancelled = true
+      purgeMermaidArtifacts(id)
+    }
   }, [syntax])
 
-  if (error) {
-    return (
-      <div className={styles.mermaidError}>
-        <p className={styles.mermaidErrorTitle}>Diagram could not be rendered</p>
-        <pre className={styles.mermaidSyntax}>{syntax}</pre>
-      </div>
-    )
-  }
-
+  if (error) return (
+    <div className={styles.mermaidError}>
+      <p>Sequence diagram could not be rendered</p>
+      <pre className={styles.mermaidSyntax}>{syntax}</pre>
+    </div>
+  )
   return (
     <div className={styles.svgScrollArea}>
-      {onShowInteractive && (
-        <div className={styles.svgToolbar}>
-          <button className={styles.actionBtn} onClick={onShowInteractive}>
-            ← Interactive
-          </button>
-        </div>
-      )}
-      <div
-        ref={containerRef}
-        className={styles.mermaidContainer}
-        style={{ opacity: ready ? 1 : 0, transition: 'opacity 0.25s ease' }}
-      />
+      <div ref={ref} className={styles.mermaidContainer} style={{ opacity: ready ? 1 : 0, transition: 'opacity 0.25s' }} />
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Single-diagram view
+// Single diagram view — async ELK layout with loading state
 // ---------------------------------------------------------------------------
 function DiagramView({ diagram }: { diagram: C4Diagram }) {
-  const parsed = useMemo(
-    () => parseMermaidToRF(diagram.mermaid_syntax, diagram.level),
-    [diagram.mermaid_syntax, diagram.level],
-  )
-  const [mode, setMode] = useState<'interactive' | 'svg'>(parsed ? 'interactive' : 'svg')
+  const [flow, setFlow] = useState<FlowResult | null>(null)
 
   useEffect(() => {
-    setMode(parsed ? 'interactive' : 'svg')
-  }, [parsed, diagram.level])
+    if (diagram.level === 'sequence' || !diagram.nodes?.length) return
+    let cancelled = false
+    setFlow(null)
 
-  if (mode === 'svg' || !parsed) {
-    return (
-      <MermaidSVG
-        key={`${diagram.level}-svg`}
-        syntax={diagram.mermaid_syntax}
-        onShowInteractive={parsed ? () => setMode('interactive') : undefined}
-      />
+    buildFlow(
+      diagram.nodes,
+      diagram.relationships ?? [],
+      diagram.boundaries ?? [],
     )
+      .then(result => { if (!cancelled) setFlow(result) })
+      .catch(err => {
+        console.warn('ELK layout failed:', err)
+      })
+
+    return () => { cancelled = true }
+  }, [diagram])
+
+  if (diagram.level === 'sequence') {
+    return <MermaidSVG syntax={diagram.mermaid_syntax ?? ''} />
+  }
+
+  if (!diagram.nodes?.length) {
+    if (diagram.mermaid_syntax) return <MermaidSVG syntax={diagram.mermaid_syntax} />
+    return <div className={styles.empty}><p>No diagram data for this level.</p></div>
+  }
+
+  if (!flow) {
+    return <div className={styles.layoutLoading}><span className={styles.layoutSpinner} />Computing layout…</div>
   }
 
   return (
-    <RFDiagram
-      nodes={parsed.nodes}
-      edges={parsed.edges}
-      onShowSVG={() => setMode('svg')}
+    <RFCanvas
+      nodes={flow.nodes}
+      edges={flow.edges}
+      c4nodes={diagram.nodes}
+      c4rels={diagram.relationships ?? []}
+      diagram={diagram}
     />
   )
 }
@@ -691,47 +1078,41 @@ function DiagramView({ diagram }: { diagram: C4Diagram }) {
 // Public component
 // ---------------------------------------------------------------------------
 const LEVEL_LABELS: Record<DiagramLevel, string> = {
-  context:   'L1 · Context',
-  container: 'L2 · Container',
-  component: 'L3 · Component',
+  context:    'L1 · Context',
+  container:  'L2 · Container',
+  component:  'L3 · Component',
+  sequence:   'Sequence',
+  deployment: 'Deployment',
 }
 
 const LEVEL_TOOLTIPS: Record<DiagramLevel, string> = {
-  context:   'System in context — who uses it and what it depends on',
-  container: 'Deployable units — services, databases, queues and how they communicate',
-  component: 'Inside a container — major components and their responsibilities',
+  context:    'System in context — who uses it and what it depends on',
+  container:  'Deployable units — services, databases, queues and how they communicate',
+  component:  'Inside a container — major components and their responsibilities',
+  sequence:   'Runtime scenario — time-ordered interactions between building blocks',
+  deployment: 'Infrastructure topology — nodes, zones, and deployed containers',
 }
 
-interface DiagramPanelProps {
-  diagrams: C4Diagram[]
-}
-
-export function DiagramPanel({ diagrams }: DiagramPanelProps) {
-  const availableLevels = useMemo(() => diagrams.map(d => d.level), [diagrams])
-  const [activeLevel, setActiveLevel] = useState<DiagramLevel>(availableLevels[0] ?? 'context')
-  const activeDiagram = diagrams.find(d => d.level === activeLevel)
-
-  const handleLevelChange = useCallback((level: DiagramLevel) => setActiveLevel(level), [])
+export function DiagramPanel({ diagrams }: { diagrams: C4Diagram[] }) {
+  const levels = useMemo(() => diagrams.map(d => d.level), [diagrams])
+  const [active, setActive] = useState<DiagramLevel>(levels[0] ?? 'context')
+  const activeDiagram = diagrams.find(d => d.level === active)
 
   if (diagrams.length === 0) {
-    return (
-      <div className={styles.empty}>
-        <p>No diagram data available.</p>
-      </div>
-    )
+    return <div className={styles.empty}><p>No diagram data available.</p></div>
   }
 
   return (
     <div className={styles.panel}>
-      {availableLevels.length > 1 && (
-        <div className={styles.levelBar} role="tablist" aria-label="C4 level">
-          {availableLevels.map(level => (
+      {levels.length > 1 && (
+        <div className={styles.levelBar} role="tablist">
+          {levels.map(level => (
             <button
               key={level}
               role="tab"
-              aria-selected={activeLevel === level}
-              className={`${styles.levelTab} ${activeLevel === level ? styles.levelTabActive : ''}`}
-              onClick={() => handleLevelChange(level)}
+              aria-selected={active === level}
+              className={`${styles.levelTab} ${active === level ? styles.levelTabActive : ''}`}
+              onClick={() => setActive(level)}
               title={LEVEL_TOOLTIPS[level]}
             >
               {LEVEL_LABELS[level] ?? level}
@@ -740,11 +1121,10 @@ export function DiagramPanel({ diagrams }: DiagramPanelProps) {
         </div>
       )}
 
-      {activeDiagram ? (
-        <DiagramView key={activeLevel} diagram={activeDiagram} />
-      ) : (
-        <div className={styles.empty}><p>No diagram for this level.</p></div>
-      )}
+      {activeDiagram
+        ? <DiagramView key={active} diagram={activeDiagram} />
+        : <div className={styles.empty}><p>No diagram for this level.</p></div>
+      }
     </div>
   )
 }

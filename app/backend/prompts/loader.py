@@ -24,21 +24,28 @@ _PLACEHOLDER = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 
 class PromptLoader:
-    """Loads and caches prompt .md files; renders only declared placeholders."""
+    """Loads and caches prompt .md files; renders only declared placeholders.
+
+    Cache is mtime-invalidated: editing a .md file on disk is picked up
+    automatically on the next render call, no server restart required.
+    """
 
     def __init__(self, directory: Path = _PROMPTS_DIR) -> None:
         self._dir = directory
         self._cache: dict[str, str] = {}
+        self._mtime: dict[str, float] = {}
 
     def load(self, name: str) -> str:
-        """Return raw template string for *name* (file-cached after first read)."""
-        if name not in self._cache:
-            path = self._dir / f"{name}.md"
-            if not path.exists():
-                raise FileNotFoundError(
-                    f"Prompt template '{name}.md' not found in {self._dir}"
-                )
+        """Return raw template string for *name*, reloading if the file changed."""
+        path = self._dir / f"{name}.md"
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Prompt template '{name}.md' not found in {self._dir}"
+            )
+        mtime = path.stat().st_mtime
+        if name not in self._cache or self._mtime.get(name) != mtime:
             self._cache[name] = path.read_text(encoding="utf-8")
+            self._mtime[name] = mtime
         return self._cache[name]
 
     def render(self, name: str, **kwargs: Any) -> str:

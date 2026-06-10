@@ -1,20 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { ChatMessage, HLDDocument } from '@/types'
+import type { ChatMessage, HLDDocument, HLDEditCommand } from '@/types'
 import { streamChat, ApiError } from '@/api/client'
-import { Send, Bot, User, Loader2 } from 'lucide-react'
+import { Send, Sparkles, User, Loader2 } from 'lucide-react'
 import styles from './ChatPanel.module.css'
+
+// Strip the HLD_EDIT marker from the displayed text
+const EDIT_MARKER_RE = /<!--\s*HLD_EDIT:[\s\S]*?-->/gi
 
 interface ChatPanelProps {
   hld: HLDDocument
+  onEdit?: (cmd: HLDEditCommand) => void
 }
 
-export function ChatPanel({ hld }: ChatPanelProps) {
+export function ChatPanel({ hld, onEdit }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
-      content: `Hi! I've reviewed the **${hld.project_name}** HLD. Ask me to explain any section, challenge a decision, or suggest alternatives.\n\nFor example: *"Why did we choose this caching strategy?"* or *"What are the risks in Section 3?"*`,
+      content: `Hi! I've reviewed the **${hld.project_name}** HLD. Ask me to explain any section, challenge a decision, or apply changes.\n\nFor example: *"Why did we choose this caching strategy?"*, *"What are the risks in Section 3?"*, or *"Rename section 1.2 to Performance Goals."*`,
     },
   ])
   const [input, setInput] = useState('')
@@ -53,7 +57,21 @@ export function ChatPanel({ hld }: ChatPanelProps) {
             return updated
           })
         },
-        () => setStreaming(false),
+        (edit) => {
+          // Strip edit marker from displayed text; attach edit metadata
+          const cleanContent = assistantContent.replace(EDIT_MARKER_RE, '').trim()
+          setMessages(prev => {
+            const updated = [...prev]
+            updated[updated.length - 1] = {
+              role: 'assistant',
+              content: cleanContent,
+              edit: edit ?? undefined,
+            }
+            return updated
+          })
+          if (edit) onEdit?.(edit)
+          setStreaming(false)
+        },
         abortRef.current.signal,
       )
     } catch (err) {
@@ -66,7 +84,7 @@ export function ChatPanel({ hld }: ChatPanelProps) {
       })
       setStreaming(false)
     }
-  }, [hld, input, messages, streaming])
+  }, [hld, input, messages, onEdit, streaming])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -87,7 +105,7 @@ export function ChatPanel({ hld }: ChatPanelProps) {
       </div>
 
       <div className={styles.header}>
-        <Bot size={15} className={styles.headerIcon} />
+        <Sparkles size={15} className={styles.headerIcon} />
         <span className={styles.headerTitle}>Architecture Sidekick</span>
       </div>
 
@@ -128,17 +146,33 @@ export function ChatPanel({ hld }: ChatPanelProps) {
   )
 }
 
+function editLabel(cmd: HLDEditCommand): string {
+  if (cmd.type === 'update_section') {
+    return cmd.title
+      ? `Section "${cmd.key}" renamed and updated`
+      : `Section "${cmd.key}" updated`
+  }
+  if (cmd.type === 'update_adr') return `ADR ${cmd.id} — ${cmd.field} updated`
+  return 'Document updated'
+}
+
 function ChatBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user'
   return (
     <div className={`${styles.bubble} ${isUser ? styles.bubbleUser : styles.bubbleAssistant}`}>
       <span className={styles.bubbleIcon} aria-hidden="true">
-        {isUser ? <User size={13} /> : <Bot size={13} />}
+        {isUser ? <User size={13} /> : <Sparkles size={13} />}
       </span>
       <div className={styles.bubbleContent}>
         <ReactMarkdown remarkPlugins={[remarkGfm]}>
           {message.content}
         </ReactMarkdown>
+        {message.edit && (
+          <div className={styles.editApplied}>
+            <span className={styles.editAppliedDot} />
+            Applied — {editLabel(message.edit)}
+          </div>
+        )}
       </div>
     </div>
   )

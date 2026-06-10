@@ -58,7 +58,51 @@ _CONWAY_KW = frozenset([
 _LEAK_TOKENS = ["{raw_text}", "{sections_str}", "{template_text}"]
 
 # IDs whose failure triggers a retry
-CRITICAL_IDS = frozenset(["CRIT-001", "CRIT-002", "CRIT-003", "CRIT-004"])
+CRITICAL_IDS = frozenset(["CRIT-001", "CRIT-002", "CRIT-003", "CRIT-004", "CRIT-005"])
+
+# ---------------------------------------------------------------------------
+# Mermaid v11 sequence diagram syntax validators
+# ---------------------------------------------------------------------------
+
+# Lines that carry a message label: actor/participant declarations are excluded.
+# Captures the label portion after the first colon on arrow lines.
+_SEQ_ARROW_RE = re.compile(r"^\s*\w+\s*(?:->>|-->|->|-x|--x|-->>)\s*\w+\s*:(.*)", re.MULTILINE)
+
+# Forbidden characters inside a message label
+_LABEL_FORBIDDEN_RE = re.compile(r"[{}<>]")
+
+# Note-over inside a block (alt/else/opt/loop/critical/break/par)
+# Detects a `Note over` that appears before the next `end` when inside a block.
+_BLOCK_OPEN_RE  = re.compile(r"^\s*(alt|else|opt|loop|critical|break|par)\b", re.IGNORECASE)
+_BLOCK_CLOSE_RE = re.compile(r"^\s*end\b", re.IGNORECASE)
+_NOTE_OVER_RE   = re.compile(r"^\s*[Nn]ote\s+over\b")
+
+
+def _mermaid_violations(syntax: str) -> list[str]:
+    """Return a list of human-readable violation descriptions, empty if clean."""
+    violations: list[str] = []
+
+    # Rule 1 — no forbidden chars in message labels
+    for m in _SEQ_ARROW_RE.finditer(syntax):
+        label = m.group(1)
+        if _LABEL_FORBIDDEN_RE.search(label):
+            violations.append(
+                f"Forbidden character ({{ }} < >) in message label: {label.strip()!r}"
+            )
+
+    # Rule 2 — Note over must not appear inside alt/else/opt/loop/... blocks
+    depth = 0
+    for line in syntax.splitlines():
+        if _BLOCK_OPEN_RE.match(line):
+            depth += 1
+        elif _BLOCK_CLOSE_RE.match(line):
+            depth = max(0, depth - 1)
+        elif depth > 0 and _NOTE_OVER_RE.match(line):
+            violations.append(
+                f"'Note over' inside a block (alt/opt/loop/else) — move it outside: {line.strip()!r}"
+            )
+
+    return violations
 
 # Minimum characters for a section to be considered substantive.
 # Rationale: a single meaningful sentence in English averages ~80–120 characters.
@@ -85,6 +129,7 @@ class HLDQualityValidator:
             self._check_section_content(doc),
             self._check_min_adrs(doc),
             self._check_min_diagrams(doc),
+            self._check_mermaid_syntax(doc),
             self._check_adr_alternatives(doc),
             self._check_adr_negative_consequences(doc),
             self._check_measurable_nfrs(doc),
@@ -159,6 +204,30 @@ class HLDQualityValidator:
             message=(
                 "No C4 diagrams generated."
                 if not ok else f"{n} diagram(s) generated."
+            ),
+        )
+
+    def _check_mermaid_syntax(self, doc: "HLDDocument") -> "QualityCheck":
+        from domain.models import QualityCheck
+        all_violations: list[str] = []
+        for diag in doc.diagrams:
+            syntax = getattr(diag, "mermaid_syntax", None)
+            if not syntax:
+                continue
+            violations = _mermaid_violations(syntax)
+            if violations:
+                title = getattr(diag, "title", diag.level) or diag.level
+                all_violations.extend(f"[{title}] {v}" for v in violations)
+        ok = len(all_violations) == 0
+        return QualityCheck(
+            id="CRIT-005",
+            label="Mermaid sequence diagram syntax valid",
+            passed=ok,
+            message=(
+                "Mermaid syntax violations found — will retry:\n"
+                + "\n".join(f"  • {v}" for v in all_violations)
+                if not ok
+                else "All sequence diagram syntax is valid."
             ),
         )
 
