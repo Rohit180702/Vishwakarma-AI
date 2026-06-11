@@ -179,7 +179,7 @@ function ADRCard({
         {(posConsequences.length > 0 || negConsequences.length > 0) && (
           <div className={styles.pcGrid}>
             {posConsequences.length > 0 && (
-              <div className={styles.pcBox}>
+              <div className={`${styles.pcBox} ${styles.pcBoxPos}`}>
                 <p className={styles.pcLabelPos}>Benefits</p>
                 <ul className={styles.pcList}>
                   {posConsequences.map((c, i) => <li key={i}>{c}</li>)}
@@ -187,7 +187,7 @@ function ADRCard({
               </div>
             )}
             {negConsequences.length > 0 && (
-              <div className={styles.pcBox}>
+              <div className={`${styles.pcBox} ${styles.pcBoxNeg}`}>
                 <p className={styles.pcLabelNeg}>Trade-offs</p>
                 <ul className={styles.pcList}>
                   {negConsequences.map((c, i) => <li key={i}>{c}</li>)}

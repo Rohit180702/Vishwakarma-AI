@@ -1,11 +1,9 @@
 import { useCallback, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
-import { FlowStepper } from '@/components/FlowStepper/FlowStepper'
-import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/Button'
 import type { HLDTemplate, Section } from '@/types'
-import { TEMPLATE_OPTIONS } from '@/types'
+import { FRAMEWORK_OPTIONS } from '@/types'
 import { TemplateCard, type CardOption } from './TemplateCard'
 import { SectionEditor } from './SectionEditor'
 import styles from './FormatSelection.module.css'
@@ -26,25 +24,25 @@ const CUSTOM_OPTION = {
 }
 
 const ALL_OPTIONS: CardOption[] = [
-  ...TEMPLATE_OPTIONS.map((o, i) => ({ ...o, index: i, default_sections: o.default_sections ?? [] })),
-  { ...CUSTOM_OPTION, index: TEMPLATE_OPTIONS.length },
+  ...FRAMEWORK_OPTIONS.map((o, i) => ({ ...o, index: i, default_sections: o.default_sections ?? [] })),
+  { ...CUSTOM_OPTION, index: FRAMEWORK_OPTIONS.length },
 ]
 
 export function FormatSelection({ onSelected, onBack }: FormatSelectionProps) {
   const [selected, setSelected]           = useState<HLDTemplate | null>(null)
   const [sections, setSections]           = useState<Section[]>([])
-  const [thoughtworksMode, setTWMode]     = useState(false)
   const gridRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
 
   const pickTemplate = useCallback((id: HLDTemplate, defaultSections: readonly string[]) => {
     setSelected(id)
-    setSections(defaultSections.map(name => ({ name, hint: '' })))
+    // Custom template starts empty — sections are populated after file upload
+    setSections(id === 'custom' ? [] : defaultSections.map(name => ({ name, hint: '' })))
   }, [])
 
   const handleContinue = () => {
     if (!selected || sections.length === 0) return
-    onSelected(selected, sections, thoughtworksMode)
+    onSelected(selected, sections, true)
     navigate('/generate')
   }
 
@@ -65,26 +63,21 @@ export function FormatSelection({ onSelected, onBack }: FormatSelectionProps) {
   const isReady = selected !== null && sections.length > 0
 
   return (
-    <div className={styles.page}>
-      <AppHeader />
-      <FlowStepper current={3} />
-
+    <>
       <div className={`${styles.body} ${selected ? styles.bodyPanelOpen : ''}`}>
 
         {/* ── Left: heading + card grid ── */}
         <div className={styles.left}>
           <div className={`${styles.leftContent} ${selected ? styles.leftContentShifted : ''}`}>
-            {/* aria-hidden: "Step 3" is visual decoration; FlowStepper already communicates progress */}
-            <p className={styles.eyebrow} aria-hidden="true">Step 3</p>
-            <h1 className={styles.headline}>Choose a format</h1>
+            <h1 className={styles.headline}>Choose a framework</h1>
             <p className={styles.sub}>
-              Pick the template that fits your team. Click to customise sections.
+              Pick the framework that fits your team. Click to customise sections.
             </p>
 
             <div
               ref={gridRef}
               role="radiogroup"
-              aria-label="HLD document template"
+              aria-label="Document framework"
               className={styles.grid}
               onKeyDown={handleGridKeyDown}
             >
@@ -99,31 +92,6 @@ export function FormatSelection({ onSelected, onBack }: FormatSelectionProps) {
               ))}
             </div>
 
-            {/* ThoughtWorks toggle — always visible below the template grid */}
-            <div className={styles.twToggleWrap}>
-              <div className={styles.twToggleTop}>
-                <div className={styles.twToggleMeta}>
-                  <label className={styles.twToggleLabel} htmlFor="tw-mode-toggle">
-                    ThoughtWorks aligned
-                  </label>
-                  <p className={styles.twToggleDesc}>
-                    {thoughtworksMode
-                      ? 'Active — adds evolutionary architecture, Team Topologies, fitness functions, and TW engineering principles.'
-                      : 'Enable to augment the standard template with ThoughtWorks engineering principles.'}
-                  </p>
-                </div>
-                <button
-                  id="tw-mode-toggle"
-                  role="switch"
-                  aria-checked={thoughtworksMode}
-                  onClick={() => setTWMode(v => !v)}
-                  className={`${styles.twToggleSwitch} ${thoughtworksMode ? styles.twToggleOn : ''}`}
-                  aria-label="Toggle ThoughtWorks engineering principles"
-                >
-                  <span className={styles.twToggleThumb} />
-                </button>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -134,6 +102,7 @@ export function FormatSelection({ onSelected, onBack }: FormatSelectionProps) {
           sections={sections}
           onSectionsChange={setSections}
           onClose={() => setSelected(null)}
+          isCustom={selected === 'custom'}
         />
       </div>
 
@@ -148,9 +117,9 @@ export function FormatSelection({ onSelected, onBack }: FormatSelectionProps) {
           onClick={handleContinue}
           icon={<ArrowRight size={16} aria-hidden="true" />}
         >
-          Generate HLD
+          Generate Document
         </Button>
       </div>
-    </div>
+    </>
   )
 }

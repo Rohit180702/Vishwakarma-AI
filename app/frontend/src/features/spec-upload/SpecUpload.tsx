@@ -1,18 +1,56 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { UploadCloud, FileText, AlertCircle, Clock, Trash2, ArrowRight, X, Lock, GitBranch, BookMarked, Sparkles } from 'lucide-react'
-import { FlowStepper } from '@/components/FlowStepper/FlowStepper'
-import { AppHeader } from '@/components/AppHeader'
+import {
+  UploadCloud, AlertCircle, Trash2, ArrowRight, X,
+  Layers, FileSearch, MessagesSquare, ChevronDown, Plus, FolderOpen, Zap,
+} from 'lucide-react'
 import { listSessions, loadSession, deleteSession, uploadSpecFiles } from '@/api/client'
 import { useToast } from '@/components/Toast/ToastContext'
-import type { SessionSummary, SessionDetail } from '@/api/client'
+import type { SessionSummary } from '@/api/client'
 import type { HLDDocument, HLDTemplate } from '@/types'
-import { SessionPreviewDrawer, sessionResumeStage } from './SessionPreviewDrawer'
+import { sessionResumeStage } from './SessionPreviewDrawer'
 import styles from './SpecUpload.module.css'
 
+// Step names mirror the FlowStepper labels exactly — one vocabulary everywhere
+const PIPELINE = [
+  { name: 'Upload',          desc: 'Your requirements document is parsed and unified into one source of truth' },
+  { name: 'Characteristics', desc: 'Quality attributes detected, each with evidence from your requirements and a confidence score' },
+  { name: 'Interview',       desc: 'Targeted questions close the gaps your requirements leave open' },
+  { name: 'Framework',       desc: 'Pick the output framework — arc42, RFC, or C4 + ADR' },
+  { name: 'Generate',        desc: 'Your Enriched Requirements Document is ready — sections, ADRs, diagrams, and an AI assistant grounded in your decisions' },
+]
+
+const FEATURES = [
+  {
+    icon: <Zap size={20} />,
+    name: 'Weeks of expert work, in one sitting',
+    desc: 'What takes a specialist weeks to produce, delivered in a single session — and regenerated in minutes when requirements change.',
+    color: 'amber' as const,
+  },
+  {
+    icon: <MessagesSquare size={20} />,
+    name: 'Decisions made before a word is written',
+    desc: 'A targeted interview closes every gap your requirements leave open. Every section reflects your explicit choices — not the AI\'s best guess.',
+    color: 'purple' as const,
+  },
+  {
+    icon: <FileSearch size={20} />,
+    name: 'Industry frameworks, straight from your requirements',
+    desc: 'Follows the frameworks and principles your team already trusts — every decision is generated from your requirements, cited and confidence-scored.',
+    color: 'indigo' as const,
+  },
+  {
+    icon: <Layers size={20} />,
+    name: 'Present it live, not as slides',
+    desc: 'Interactive diagrams simulate your architecture — click any component and watch the flow run end-to-end, with a guided exploration built for the review room.',
+    color: 'emerald' as const,
+  },
+]
+
 interface SpecUploadProps {
-  onReady: (specText: string, sessionId?: string) => void
-  onLoadSession: (spec: string, template: HLDTemplate, hld: HLDDocument, sessionId?: string) => void
+  onReady: (specText: string, sessionId?: string, projectName?: string) => void
+  onLoadSession: (spec: string, template: HLDTemplate, hld: HLDDocument, sessionId?: string, projectName?: string) => void
+  currentProjectName?: string | null
 }
 
 type UploadState = 'idle' | 'dragging' | 'reading' | 'uploading' | 'error'
@@ -22,14 +60,15 @@ interface FileWithPreview {
   id: string
 }
 
-export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
+export function SpecUpload({ onReady, onLoadSession, currentProjectName }: SpecUploadProps) {
   const [state, setState] = useState<UploadState>('idle')
   const [errorMsg, setErrorMsg] = useState('')
   const [selectedFiles, setSelectedFiles] = useState<FileWithPreview[]>([])
   const [sessions, setSessions] = useState<SessionSummary[]>([])
-  const [drawerDetail, setDrawerDetail] = useState<SessionDetail | null>(null)
-  const [drawerLoading, setDrawerLoading] = useState(false)
+  const [switchingId, setSwitchingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [workspaceOpen, setWorkspaceOpen] = useState(false)
+  const workspaceRef = useRef<HTMLDivElement>(null)
   const { showToast } = useToast()
   const navigate = useNavigate()
 
@@ -37,36 +76,43 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
     listSessions().then(setSessions).catch(() => {})
   }, [])
 
-  const handleSessionClick = async (id: string) => {
-    setDrawerDetail(null)
-    setDrawerLoading(true)
+  // Close workspace dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (workspaceRef.current && !workspaceRef.current.contains(e.target as Node)) {
+        setWorkspaceOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleSwitchProject = async (id: string) => {
+    setWorkspaceOpen(false)
+    setSwitchingId(id)
     try {
       const detail = await loadSession(id)
-      setDrawerDetail(detail)
-    } catch (e) {
-      console.error('Failed to load session', e)
-      showToast('Failed to load session. Please try again.', 'error')
-      setDrawerLoading(false)
-    } finally {
-      setDrawerLoading(false)
-    }
-  }
+      const dest = sessionResumeStage(detail)
+      const name = detail.project_name
 
-  const handleResume = () => {
-    if (!drawerDetail) return
-    const dest = sessionResumeStage(drawerDetail)
-    setDrawerDetail(null)
+      if (currentProjectName && currentProjectName !== name) {
+        showToast(`Switched to ${name}`, 'info')
+      }
 
-    if (dest === 'generate') {
-      try {
-        const hld: HLDDocument = JSON.parse(drawerDetail.hld_json)
-        onLoadSession(drawerDetail.spec_text, drawerDetail.template as HLDTemplate, hld, drawerDetail.id)
+      if (dest === 'generate') {
+        const hld: HLDDocument = JSON.parse(detail.hld_json)
+        onLoadSession(detail.spec_text, detail.template as HLDTemplate, hld, detail.id, name)
         navigate('/generate')
-      } catch { console.error('Failed to parse HLD') }
-    } else {
-      // Set spec + sessionId so interview / format routes are accessible
-      onReady(drawerDetail.spec_text, drawerDetail.id)
-      navigate(dest === 'format' ? '/format' : '/interview')
+      } else {
+        onReady(detail.spec_text, detail.id, name)
+        if (dest === 'format') navigate('/framework')
+        else if (dest === 'interview') navigate('/interview')
+        else navigate('/characteristics')
+      }
+    } catch {
+      showToast('Failed to load project. Please try again.', 'error')
+    } finally {
+      setSwitchingId(null)
     }
   }
 
@@ -79,7 +125,6 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
     setDeletingId(null)
     await deleteSession(id)
     setSessions((prev: SessionSummary[]) => prev.filter((s: SessionSummary) => s.id !== id))
-    if (drawerDetail?.id === id) setDrawerDetail(null)
   }
 
   const addFiles = useCallback((files: FileList | null) => {
@@ -101,8 +146,19 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
       showToast(`Skipped unsupported file${plural}: ${names}`, 'info')
     }
 
-    const newFiles = validFiles.map(file => ({ file, id: crypto.randomUUID() }))
-    setSelectedFiles(prev => [...prev, ...newFiles])
+    setSelectedFiles(prev => {
+      const existingNames = new Set(prev.map(f => f.file.name))
+      const duplicates = validFiles.filter(f => existingNames.has(f.name))
+      const fresh = validFiles.filter(f => !existingNames.has(f.name))
+
+      if (duplicates.length > 0) {
+        const p = duplicates.length > 1 ? 's' : ''
+        showToast(`Skipped duplicate file${p}: ${duplicates.map(f => f.name).join(', ')}`, 'info')
+      }
+
+      return [...prev, ...fresh.map(file => ({ file, id: crypto.randomUUID() }))]
+    })
+
     setState('idle')
     setErrorMsg('')
   }, [showToast])
@@ -119,9 +175,9 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
       const files = selectedFiles.map(f => f.file)
       const response = await uploadSpecFiles(files)
 
-      onReady(response.unified_spec_text, response.session_id)
+      onReady(response.unified_spec_text, response.session_id, response.project_name)
       setState('idle')
-      navigate(`/characteristics?session=${response.session_id}`)
+      navigate('/characteristics')
     } catch (error) {
       console.error('Upload failed:', error)
       const msg = 'Failed to upload and parse documents. Please try again.'
@@ -141,37 +197,132 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
     addFiles(e.target.files)
   }
 
+  const stageLabel = (stage?: string) =>
+    stage === 'generate'        ? 'Document ready'
+    : stage === 'format'        ? 'Framework'
+    : stage === 'interview'     ? 'Interview'
+    : /* characteristics / default */ 'Detecting'
+
   return (
-    <div className={styles.page}>
-      <AppHeader />
-      <FlowStepper current={0} />
+    <main className={styles.page}>
 
-      <main className={styles.main}>
-        <div className={styles.hero}>
-          <span className={styles.eyebrow}>
-            <Sparkles size={12} /> AI Architecture Copilot
-          </span>
-          <h1 className={styles.title}>
-            Turn your spec into <span className={styles.titleAccent}>architecture</span>
-          </h1>
-          <p className={styles.subtitle}>
-            Drop in a specification — get a complete High-Level Design in minutes.
-          </p>
-          <div className={styles.featureRow}>
-            <span className={styles.featureChip}><GitBranch size={13} /> Interactive C4 diagrams</span>
-            <span className={styles.featureChip}><BookMarked size={13} /> Decision records</span>
-            <span className={styles.featureChip}><Sparkles size={13} /> Conversational walkthroughs</span>
-          </div>
-        </div>
+        {/* ══════════ TOP RIGHT — project picker (floating) ══════════ */}
+        {sessions.length > 0 && (
+          <div className={styles.projectPickerOverlay} ref={workspaceRef}>
+            <span className={styles.topBarLabel}>Project</span>
+            <div className={styles.workspacePicker}>
+              <button
+                className={`${styles.workspaceBtn} ${workspaceOpen ? styles.workspaceBtnOpen : ''}`}
+                onClick={() => setWorkspaceOpen(o => !o)}
+              >
+                <div className={styles.workspaceIcon}><FolderOpen size={14} /></div>
+                <div className={styles.workspaceMeta}>
+                  <div className={styles.workspaceName}>
+                    {currentProjectName ?? 'Select a project'}
+                  </div>
+                  <div className={styles.workspaceHint}>
+                    {sessions.length} project{sessions.length > 1 ? 's' : ''}
+                  </div>
+                </div>
+                <ChevronDown size={15} className={styles.workspaceChevron} />
+              </button>
 
-        {state === 'error' && (
-          <div className={styles.errorBanner} role="alert">
-            <AlertCircle size={15} />
-            <span>{errorMsg}</span>
+              {workspaceOpen && (
+                <div className={`${styles.workspaceDropdown} ${styles.workspaceDropdownRight}`}>
+                  <div className={styles.dropdownHeader}>Switch project</div>
+                  <div className={styles.dropdownList}>
+                    {sessions.map(s => (
+                      <div
+                        key={s.id}
+                        className={`${styles.dropdownItem} ${currentProjectName === s.project_name ? styles.dropdownItemActive : ''}`}
+                        onClick={() => { if (currentProjectName !== s.project_name) { handleSwitchProject(s.id) } else { setWorkspaceOpen(false) } }}
+                        onMouseLeave={() => setDeletingId(null)}
+                      >
+                        <div className={styles.dropdownItemIcon}><Layers size={13} /></div>
+                        <div className={styles.dropdownItemMeta}>
+                          <div className={styles.dropdownItemName}>{s.project_name}</div>
+                          <div className={styles.dropdownItemSub}>
+                            <span className={`${styles.stageBadge} ${styles[`stageBadge_${s.stage ?? 'characteristics'}`]}`}>
+                              {stageLabel(s.stage)}
+                            </span>
+                            <span className={styles.dropdownItemDate}>
+                              {new Date(s.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            </span>
+                          </div>
+                        </div>
+                        {switchingId === s.id
+                          ? <span className={styles.dropdownItemSwitching} />
+                          : currentProjectName === s.project_name
+                          ? <span className={styles.dropdownItemCurrent}>current</span>
+                          : <ArrowRight size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                        }
+                        {deletingId === s.id ? (
+                          <span
+                            className={styles.stageBadge}
+                            style={{ color: 'var(--color-danger)', background: 'var(--color-danger-light)', cursor: 'pointer', border: '1px solid #fca5a5' }}
+                            onClick={e => { e.stopPropagation(); handleDeleteSession(e, s.id) }}
+                          >Delete?</span>
+                        ) : (
+                          <button
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '2px', borderRadius: '4px', flexShrink: 0 }}
+                            onClick={e => { e.stopPropagation(); handleDeleteSession(e, s.id) }}
+                            title="Delete"
+                          ><Trash2 size={12} /></button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className={styles.dropdownDivider} />
+                  <div className={styles.dropdownNewHint}>
+                    <Plus size={12} /> Upload a requirements document to start a new project
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        <div className={styles.uploadCard}>
+        {/* ══════════ LEFT — product value ══════════ */}
+        <aside className={styles.left}>
+
+          <p className={styles.sectionLabel}>Why it works</p>
+          <div className={styles.features}>
+            {FEATURES.map(f => (
+              <div key={f.name} className={`${styles.featureCard} ${styles[`featureCard_${f.color}`]}`}>
+                <div className={`${styles.featureIconWrap} ${styles[`featureIconWrap_${f.color}`]}`}>{f.icon}</div>
+                <div className={styles.featureText}>
+                  <span className={styles.featureName}>{f.name}</span>
+                  <span className={styles.featureDesc}>{f.desc}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        {/* ══════════ CENTER — hero headline + upload ══════════ */}
+        <div className={styles.center}>
+
+          {/* Brand copy centered at the top */}
+          <div className={styles.centerHero}>
+            <span className={styles.centerHeroBadge}>From requirements to Enriched Requirements Document</span>
+            <h1 className={styles.centerHeroHeadline}>
+              From requirements to sign-off.{' '}
+              <span className={styles.centerHeroAccent}>In minutes, not weeks.</span>
+            </h1>
+            <p className={styles.centerHeroTagline}>
+              It reads your requirements, asks what's missing, and writes the full design —
+              every decision backed by evidence.
+            </p>
+          </div>
+
+
+          {state === 'error' && (
+            <div className={styles.errorBanner} role="alert">
+              <AlertCircle size={15} />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
           {state === 'uploading' ? (
             <div className={styles.reading}>
               <span className={styles.readingSpinner} />
@@ -185,11 +336,11 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
               onDragLeave={() => setState('idle')}
               onDrop={onDrop}
             >
-              <span className={styles.uploadIconRing}>
-                <UploadCloud size={26} strokeWidth={1.6} className={styles.uploadIcon} />
-              </span>
-              <p className={styles.dropLabel}>Drag &amp; drop your specification files</p>
-              <p className={styles.dropSub}>PDF · DOCX · MD · TXT</p>
+              <div className={styles.uploadIconWrap}>
+                <UploadCloud size={22} strokeWidth={1.5} />
+              </div>
+              <p className={styles.dropLabel}>Drop your requirements document</p>
+              <p className={styles.dropSub}>PDF, DOCX, Markdown, or plain text · multiple files supported</p>
               <span className={styles.browseBtn}>Browse files</span>
               <input
                 id="spec-file"
@@ -201,106 +352,79 @@ export function SpecUpload({ onReady, onLoadSession }: SpecUploadProps) {
               />
             </label>
           )}
+
+          {selectedFiles.length > 0 && (
+            <div className={styles.filesCard}>
+              <div className={styles.filesHeader}>
+                <span className={styles.filesHeaderLabel}>
+                  {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} prepared
+                </span>
+                <div className={styles.filesHeaderDots}>
+                  <span /><span /><span />
+                </div>
+              </div>
+              <div className={styles.filesList}>
+                {selectedFiles.map((fileItem: FileWithPreview) => {
+                  const ext = fileItem.file.name.split('.').pop()?.toLowerCase() ?? ''
+                  const extClass = ext === 'md' ? styles.fileExtMD
+                    : ext === 'pdf'  ? styles.fileExtPDF
+                    : ext === 'txt'  ? styles.fileExtTXT
+                    : ext === 'docx' ? styles.fileExtDOCX
+                    : styles.fileExtDefault
+                  const sizeKb = fileItem.file.size / 1024
+                  const sizeStr = sizeKb >= 1024
+                    ? `${(sizeKb / 1024).toFixed(1)} MB`
+                    : `${sizeKb.toFixed(1)} KB`
+                  return (
+                    <div key={fileItem.id} className={styles.fileItem}>
+                      <span className={`${styles.fileExt} ${extClass}`}>{ext.toUpperCase()}</span>
+                      <div className={styles.fileInfo}>
+                        <span className={styles.fileName}>{fileItem.file.name}</span>
+                        <span className={styles.fileMeta}>{sizeStr} · Just added</span>
+                      </div>
+                      <button className={styles.fileRemove} onClick={(e: React.MouseEvent) => { e.stopPropagation(); removeFile(fileItem.id) }} title="Remove" aria-label={`Remove ${fileItem.file.name}`}>
+                        <X size={11} />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+              <button className={styles.uploadBtn} onClick={handleUpload} disabled={state === 'uploading'}>
+                {state === 'uploading' ? 'Uploading…' : 'Analyse requirements →'}
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className={styles.privacyRow}>
-          <Lock size={12} />
-          <span>No account needed · spec stays in your session</span>
+        {/* ══════════ RIGHT — how it works ══════════ */}
+        <div className={styles.right}>
+          <p className={styles.sectionLabel}>How it works</p>
+          <div className={styles.howItWorksCard}>
+            <div className={styles.howItWorksInner}>
+              <div className={styles.pipeline}>
+                {PIPELINE.map((step, i) => (
+                  <div key={step.name} className={styles.pipelineStep}>
+                    {/* flex flex-col items-center: dot + line */}
+                    <div className={styles.stepIndicator}>
+                      <span className={i === 0 ? styles.stepDotActive : styles.stepDotMuted} />
+                      {i < PIPELINE.length - 1 && <span className={styles.stepLine} />}
+                    </div>
+                    <div className={styles.stepText}>
+                      <span className={i === 0 ? styles.stepNameActive : styles.stepNameMuted}>
+                        {i + 1} · {step.name}
+                      </span>
+                      <span className={i === 0 ? styles.stepDescActive : styles.stepDescMuted}>
+                        {step.desc}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
         </div>
 
-        {/* Selected files list */}
-        {selectedFiles.length > 0 && (
-          <div className={styles.filesCard}>
-            <div className={styles.filesHeader}>
-              <FileText size={13} />
-              <span>Ready to upload · {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''}</span>
-            </div>
-            <div className={styles.filesList}>
-              {selectedFiles.map((fileItem: FileWithPreview) => (
-                <div key={fileItem.id} className={styles.fileItem}>
-                  <span className={styles.fileExt}>
-                    {fileItem.file.name.split('.').pop()?.toUpperCase()}
-                  </span>
-                  <span className={styles.fileName}>{fileItem.file.name}</span>
-                  <span className={styles.fileSize}>
-                    {(fileItem.file.size / 1024).toFixed(1)} KB
-                  </span>
-                  <button
-                    className={styles.fileRemove}
-                    onClick={(e: React.MouseEvent) => { e.stopPropagation(); removeFile(fileItem.id) }}
-                    title="Remove file"
-                    aria-label={`Remove ${fileItem.file.name}`}
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button className={styles.uploadBtn} onClick={handleUpload} disabled={state === 'uploading'}>
-              {state === 'uploading' ? 'Uploading…' : `Generate architecture from ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} →`}
-            </button>
-          </div>
-        )}
-
-        {sessions.length > 0 && (
-          <div className={styles.sessions}>
-            <div className={styles.sessionsHeader}>
-              <Clock size={13} />
-              <span>Recent sessions</span>
-            </div>
-            <div className={styles.sessionsList}>
-              {sessions.map(s => (
-                <div
-                  key={s.id}
-                  role="button"
-                  tabIndex={0}
-                  className={`${styles.sessionItem} ${drawerDetail?.id === s.id ? styles.sessionItemActive : ''}`}
-                  onClick={() => handleSessionClick(s.id)}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSessionClick(s.id) } }}
-                  title="Preview this session"
-                  onMouseLeave={() => setDeletingId(null)}
-                >
-                  <FileText size={14} className={styles.sessionFileIcon} />
-                  <span className={styles.sessionName}>{s.project_name}</span>
-                  <span className={styles.sessionMeta}>
-                    <span className={`${styles.stageBadge} ${styles[`stageBadge_${s.stage}`]}`}>
-                      {s.stage === 'generate' ? 'HLD ready' : s.stage === 'format' ? 'Pick template' : 'Interview'}
-                    </span>
-                    <span className={styles.sessionDate}>
-                      {new Date(s.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </span>
-                  <ArrowRight size={13} className={styles.sessionArrow} />
-                  {deletingId === s.id ? (
-                    <span
-                      className={styles.sessionDeleteConfirm}
-                      onClick={e => handleDeleteSession(e, s.id)}
-                      title="Click again to confirm deletion"
-                    >
-                      Delete?
-                    </span>
-                  ) : (
-                    <button
-                      className={styles.sessionDelete}
-                      onClick={e => handleDeleteSession(e, s.id)}
-                      title="Delete session"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </main>
-
-      <SessionPreviewDrawer
-        detail={drawerDetail}
-        loading={drawerLoading}
-        onClose={() => { setDrawerDetail(null); setDrawerLoading(false) }}
-        onResume={handleResume}
-      />
-    </div>
+    </main>
   )
 }

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import type { HLDDocument, HLDTemplate, Section } from '@/types'
 import { useAuth } from '@/contexts/AuthContext'
 import { LoginPage } from '@/features/auth'
 import { Dashboard } from '@/features/dashboard'
+import { StepLayout } from '@/components/StepLayout'
 import { SpecUpload } from '@/features/spec-upload/SpecUpload'
 import { CharacteristicsPage } from '@/features/characteristics'
-import { InterviewPage } from '@/features/interview/InterviewPage'
+import { InterviewPage } from '@/features/interview'
 import { FormatSelection } from '@/features/format-selection/FormatSelection'
 import { HLDOutput } from '@/features/hld-output'
 import { Spinner } from '@/components/Spinner'
@@ -45,44 +46,81 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 export function App() {
   const { isAuthenticated, loading } = useAuth()
   const saved = readSaved()
+  const navigate = useNavigate()
 
   const [specText, setSpecText]     = useState<string>((saved.specText as string) ?? '')
   const [sessionId, setSessionId]   = useState<string | null>((saved.sessionId as string) ?? null)
+  const [projectName, setProjectName] = useState<string | null>((saved.projectName as string) ?? null)
   const [template, setTemplate]     = useState<HLDTemplate | null>((saved.template as HLDTemplate) ?? null)
   const [customSections, setCustomSections]         = useState<Section[] | undefined>((saved.customSections as Section[]) ?? undefined)
   const [customTemplateText, setCustomTemplateText] = useState<string | undefined>(undefined)
   const [preloadedHld, setPreloadedHld]             = useState<HLDDocument | null>((saved.preloadedHld as HLDDocument) ?? null)
-  const [thoughtworksMode, setThoughtworksMode]     = useState<boolean>((saved.thoughtworksMode as boolean) ?? false)
 
   // Persist whenever relevant state changes
   useEffect(() => {
     try {
       sessionStorage.setItem(SS_KEY, JSON.stringify({
-        specText, sessionId, template, customSections, preloadedHld, thoughtworksMode,
+        specText, sessionId, projectName, template, customSections, preloadedHld,
       }))
     } catch { /* storage quota exceeded — swallow silently */ }
-  }, [specText, sessionId, template, customSections, preloadedHld, thoughtworksMode])
+  }, [specText, sessionId, projectName, template, customSections, preloadedHld])
 
-  const handleSpecReady = (text: string, sid?: string) => {
+  const handleSpecReady = (text: string, sid?: string, name?: string) => {
     setSpecText(text)
     if (sid) setSessionId(sid)
+    if (name) setProjectName(name)
     // Clear downstream state when a new spec is loaded
     setTemplate(null)
     setPreloadedHld(null)
     setCustomSections(undefined)
   }
 
-  const handleFormatSelected = (t: HLDTemplate, sections: Section[], twMode: boolean) => {
+  // Called when the interview completes (either by answering or skipping).
+  // Updating specText and navigating in the same App.tsx function ensures
+  // React commits the state before the /framework route guard evaluates it.
+  const handleInterviewComplete = (enhancedSpec: string) => {
+    setSpecText(enhancedSpec)
+    setTemplate(null)
+    setPreloadedHld(null)
+    setCustomSections(undefined)
+    navigate('/framework')
+  }
+
+  const handleFormatSelected = (t: HLDTemplate, sections: Section[], _twMode: boolean) => {
     setTemplate(t)
     setCustomSections(sections.length > 0 ? sections : undefined)
     setCustomTemplateText(undefined)
     setPreloadedHld(null)
-    setThoughtworksMode(twMode)
   }
 
-  const handleLoadSession = (spec: string, t: HLDTemplate, hld: HLDDocument, sid?: string) => {
+  // Bumped on every reset so the step pages remount even when the reset
+  // targets the route the user is already on (same-path navigation is a no-op).
+  const [flowEpoch, setFlowEpoch] = useState(0)
+
+  // Phase-specific restart: keep everything before the chosen step, clear the
+  // chosen step and everything after it, then land on that step.
+  const handleRestartFrom = (route: string) => {
+    if (route === '/') {
+      // Restarting from Upload discards the whole flow
+      setSpecText('')
+      setSessionId(null)
+      setProjectName(null)
+    }
+    // Template choice and generated HLD are downstream of every restart
+    // target; interview answers live in the backend and are overwritten when
+    // the interview is redone, characteristics re-detect on revisit.
+    setTemplate(null)
+    setCustomSections(undefined)
+    setCustomTemplateText(undefined)
+    setPreloadedHld(null)
+    setFlowEpoch(e => e + 1)
+    navigate(route)
+  }
+
+  const handleLoadSession = (spec: string, t: HLDTemplate, hld: HLDDocument, sid?: string, name?: string) => {
     setSpecText(spec)
     if (sid) setSessionId(sid)
+    if (name) setProjectName(name)
     setTemplate(t)
     setCustomSections(undefined)
     setCustomTemplateText(undefined)
@@ -98,12 +136,21 @@ export function App() {
     )
   }
 
+  // Which steps can be navigated to given current session state.
+  const stepAccessible: boolean[] = [
+    true,
+    !!(specText && sessionId),
+    !!(specText && sessionId),
+    !!specText,
+    !!(specText && template),
+  ]
+
   return (
     <Routes>
       {/* Public Routes */}
       <Route path="/login" element={!isAuthenticated ? <LoginPage /> : <Navigate to="/dashboard" replace />} />
 
-      {/* Protected Routes */}
+      {/* Dashboard */}
       <Route
         path="/dashboard"
         element={
@@ -113,53 +160,49 @@ export function App() {
         }
       />
 
-      {/* Step 1 — Upload */}
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <SpecUpload onReady={handleSpecReady} onLoadSession={handleLoadSession} />
-          </ProtectedRoute>
-        }
-      />
+      {/* Steps 1–4 share the StepLayout chrome */}
+      <Route element={<StepLayout key={flowEpoch} onRestartFrom={handleRestartFrom} stepAccessible={stepAccessible} projectName={projectName} />}>
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <SpecUpload onReady={handleSpecReady} onLoadSession={handleLoadSession} currentProjectName={projectName} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/characteristics"
+          element={
+            <ProtectedRoute>
+              {specText && sessionId
+                ? <CharacteristicsPage sessionId={sessionId} />
+                : <Navigate to="/" replace />}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/interview"
+          element={
+            <ProtectedRoute>
+              {specText && sessionId
+                ? <InterviewPage sessionId={sessionId} onSpecReady={handleSpecReady} onInterviewComplete={handleInterviewComplete} />
+                : <Navigate to="/" replace />}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/framework"
+          element={
+            <ProtectedRoute>
+              {specText
+                ? <FormatSelection onSelected={handleFormatSelected} />
+                : <Navigate to="/" replace />}
+            </ProtectedRoute>
+          }
+        />
+      </Route>
 
-      {/* Step 2 — Characteristics Detection & Prioritization */}
-      <Route
-        path="/characteristics"
-        element={
-          <ProtectedRoute>
-            {specText && sessionId
-              ? <CharacteristicsPage />
-              : <Navigate to="/" replace />}
-          </ProtectedRoute>
-        }
-      />
-
-      {/* Step 3 — Interview (requires uploaded spec + session) */}
-      <Route
-        path="/interview"
-        element={
-          <ProtectedRoute>
-            {specText && sessionId
-              ? <InterviewPage sessionId={sessionId} onSpecReady={handleSpecReady} />
-              : <Navigate to="/" replace />}
-          </ProtectedRoute>
-        }
-      />
-
-      {/* Step 4 — Template selection */}
-      <Route
-        path="/format"
-        element={
-          <ProtectedRoute>
-            {specText
-              ? <FormatSelection onSelected={handleFormatSelected} />
-              : <Navigate to="/" replace />}
-          </ProtectedRoute>
-        }
-      />
-
-      {/* Step 5 — HLD output */}
+      {/* Step 5 — HLD output (full-screen workspace, deliberately chromeless) */}
       <Route
         path="/generate"
         element={
@@ -172,7 +215,6 @@ export function App() {
                 customSections={customSections}
                 customTemplateText={customTemplateText}
                 preloadedHld={preloadedHld}
-                thoughtworksMode={thoughtworksMode}
               />
             ) : (
               <Navigate to="/" replace />
@@ -181,7 +223,7 @@ export function App() {
         }
       />
 
-      {/* HLD Output for reviewers - no prerequisites needed */}
+      {/* HLD Output for reviewers — no flow prerequisites needed */}
       <Route
         path="/hld-output"
         element={
@@ -193,7 +235,6 @@ export function App() {
               customSections={undefined}
               customTemplateText={undefined}
               preloadedHld={null}
-              thoughtworksMode={false}
             />
           </ProtectedRoute>
         }

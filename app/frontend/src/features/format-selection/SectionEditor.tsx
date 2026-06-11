@@ -1,7 +1,9 @@
 import { useId, useRef, useState } from 'react'
-import { GripVertical, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { GripVertical, X, ChevronDown, ChevronUp, UploadCloud, FileText, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/Button'
+import { Spinner } from '@/components/Spinner'
 import type { HLDTemplate, Section } from '@/types'
+import { extractTemplateSections } from '@/api/client'
 import styles from './FormatSelection.module.css'
 
 interface SectionEditorProps {
@@ -10,16 +12,47 @@ interface SectionEditorProps {
   sections: Section[]
   onSectionsChange: (sections: Section[]) => void
   onClose: () => void
+  isCustom?: boolean
 }
 
 export function SectionEditor({
-  selected, selectedName, sections, onSectionsChange, onClose,
+  selected, selectedName, sections, onSectionsChange, onClose, isCustom = false,
 }: SectionEditorProps) {
   const [newSection, setNewSection] = useState('')
   const [expandedHints, setExpandedHints] = useState<Set<number>>(new Set())
+  const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'done'>('idle')
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const dragIdx = useRef<number | null>(null)
   const inputId = useId()
   const emptyId = useId()
+
+  const handleFileChange = async (file: File) => {
+    setUploadError(null)
+    setUploadState('uploading')
+    setUploadedFileName(file.name)
+    try {
+      const result = await extractTemplateSections(file)
+      onSectionsChange(result.sections.map(s => ({ name: s.name, hint: s.hint })))
+      setUploadState('done')
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : 'Failed to extract sections.')
+      setUploadState('idle')
+      setUploadedFileName(null)
+    }
+  }
+
+  const handleDropZoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) handleFileChange(file)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files?.[0]
+    if (file) handleFileChange(file)
+  }
 
   const toggleHint = (i: number) =>
     setExpandedHints(prev => {
@@ -90,13 +123,73 @@ export function SectionEditor({
             <div>
               <p className={styles.panelLabel}>{selectedName ?? 'Template'}</p>
               <p className={styles.panelHint} aria-live="polite">
-                {sections.length} section{sections.length !== 1 ? 's' : ''} · drag or ↑↓ to reorder
+                {isCustom && uploadState !== 'done'
+                  ? 'Upload a template to extract sections'
+                  : `${sections.length} section${sections.length !== 1 ? 's' : ''} · drag or ↑↓ to reorder`}
               </p>
             </div>
             <button className={styles.closeBtn} onClick={onClose} aria-label="Close section editor">
               <X size={14} aria-hidden="true" />
             </button>
           </div>
+
+          {/* Custom template: show upload zone until file is processed */}
+          {isCustom && uploadState !== 'done' && (
+            <div className={styles.uploadZoneWrap}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx,.doc,.md,.txt"
+                className={styles.uploadInput}
+                onChange={handleDropZoneChange}
+                aria-label="Upload template file"
+              />
+              <div
+                className={`${styles.uploadZone} ${uploadState === 'uploading' ? styles.uploadZoneLoading : ''}`}
+                onClick={() => uploadState === 'idle' && fileInputRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={handleDrop}
+                role="button"
+                tabIndex={0}
+                onKeyDown={e => e.key === 'Enter' && fileInputRef.current?.click()}
+              >
+                {uploadState === 'uploading' ? (
+                  <>
+                    <Spinner />
+                    <p className={styles.uploadZoneTitle}>Extracting sections…</p>
+                    <p className={styles.uploadZoneSub}>{uploadedFileName}</p>
+                  </>
+                ) : (
+                  <>
+                    <UploadCloud size={28} className={styles.uploadZoneIcon} />
+                    <p className={styles.uploadZoneTitle}>Drop your template here</p>
+                    <p className={styles.uploadZoneSub}>PDF, DOCX, Markdown, TXT · click to browse</p>
+                  </>
+                )}
+              </div>
+              {uploadError && (
+                <div className={styles.uploadError}>
+                  <AlertCircle size={13} />
+                  {uploadError}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Extracted file badge when done */}
+          {isCustom && uploadState === 'done' && uploadedFileName && (
+            <div className={styles.uploadedBadge}>
+              <FileText size={13} />
+              <span>{uploadedFileName}</span>
+              <button
+                className={styles.uploadedBadgeReset}
+                onClick={() => { setUploadState('idle'); setUploadedFileName(null); onSectionsChange([]) }}
+                title="Upload a different file"
+              >
+                <X size={11} />
+              </button>
+            </div>
+          )}
 
           <ul className={styles.sectionList} aria-label={`Sections for ${selectedName ?? 'template'}`}>
             {sections.map((s, i) => {

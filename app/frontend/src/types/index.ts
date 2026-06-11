@@ -110,7 +110,7 @@ export interface Section {
   hint: string   // empty string when the user hasn't provided one
 }
 
-export interface TemplateOption {
+export interface FrameworkOption {
   id: HLDTemplate
   name: string
   standard: string
@@ -175,7 +175,7 @@ export interface LoginResponse {
   user: User
 }
 
-export const TEMPLATE_OPTIONS: TemplateOption[] = [
+export const FRAMEWORK_OPTIONS: FrameworkOption[] = [
   {
     id: 'arc42',
     name: 'arc42',

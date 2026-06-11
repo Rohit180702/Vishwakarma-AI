@@ -928,7 +928,7 @@ function RFCanvas({
               </div>
             )}
             <div className={styles.stepInfo}>
-              <span className={styles.stepCount}>Walkthrough · {stepIndex + 1} / {querySteps.length}</span>
+              <span className={styles.stepCount}>Explore · {stepIndex + 1} / {querySteps.length}</span>
               <span className={styles.stepQueryEcho}>"{queryText}"</span>
             </div>
             <div className={styles.rfToolbarActions}>
@@ -952,7 +952,7 @@ function RFCanvas({
               >
                 {isSimulating ? '⏸' : '▶'}
               </button>
-              <button className={styles.actionBtn} onClick={clearQuery} title="Exit walkthrough (Esc)">✕</button>
+              <button className={styles.actionBtn} onClick={clearQuery} title="Exit explore (Esc)">✕</button>
               <button className={`${styles.actionBtn} ${styles.actionBtnPrimary}`} onClick={toggleFullscreen}>
                 {isFullscreen ? '✕ Exit' : '⛶ Present'}
               </button>

@@ -18,7 +18,7 @@ interface ChatPanelProps {
 
 const WELCOME = (projectName: string): ChatMessage => ({
   role: 'assistant',
-  content: `Hi! I've reviewed the **${projectName}** HLD. Ask me to explain any section, challenge a decision, or apply changes.\n\nFor example: *"Why did we choose this caching strategy?"*, *"What are the risks in Section 3?"*, or *"Rename section 1.2 to Performance Goals."*`,
+  content: `Hi! I've reviewed the **${projectName}** document. Ask me to explain any section, challenge a decision, or apply changes.\n\nFor example: *"Why did we choose this caching strategy?"*, *"What are the risks in Section 3?"*, or *"Rename section 1.2 to Performance Goals."*`,
 })
 
 function chatKey(sessionId: string | null | undefined, projectName: string) {
@@ -145,7 +145,7 @@ export function ChatPanel({ hld, sessionId, onEdit }: ChatPanelProps) {
 
       <div className={styles.header}>
         <Sparkles size={15} className={styles.headerIcon} />
-        <span className={styles.headerTitle}>Architecture Sidekick</span>
+        <span className={styles.headerTitle}>Architecture Assistant</span>
       </div>
 
       <div className={styles.messages} aria-live="polite" aria-label="Chat messages">

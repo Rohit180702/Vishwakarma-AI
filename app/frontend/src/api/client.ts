@@ -37,19 +37,19 @@ async function request<T>(
   init: RequestInit = {},
 ): Promise<T> {
   const token = getToken()
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
+  // Don't force Content-Type for FormData — browser sets it with the correct multipart boundary
+  const defaultHeaders: Record<string, string> = init.body instanceof FormData
+    ? {}
+    : { 'Content-Type': 'application/json' }
 
-  // Add Authorization header if token exists
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`
+    defaultHeaders['Authorization'] = `Bearer ${token}`
   }
 
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
-      ...headers,
+      ...defaultHeaders,
       ...(init.headers as Record<string, string>),
     },
   })
@@ -59,6 +59,9 @@ async function request<T>(
     try { body = await res.json() } catch { /* empty */ }
     throw new ApiError(res.status, body.detail ?? res.statusText, body.errors ?? [])
   }
+
+  // 204 No Content — nothing to parse (e.g. DELETE endpoints)
+  if (res.status === 204) return undefined as T
 
   return res.json() as Promise<T>
 }
@@ -157,7 +160,6 @@ export async function streamHLD(
   signal?: AbortSignal,
   customSections?: string[],
   customTemplateText?: string,
-  thoughtworksMode?: boolean,
 ): Promise<void> {
   const res = await fetch(`${BASE}/hld/generate/stream`, {
     method: 'POST',
@@ -167,7 +169,7 @@ export async function streamHLD(
       template,
       custom_sections: customSections ?? null,
       custom_template_text: customTemplateText ?? null,
-      thoughtworks_mode: thoughtworksMode ?? false,
+      thoughtworks_mode: true,
     }),
     signal,
   })
@@ -208,12 +210,14 @@ export async function streamHLD(
 // Sessions
 // ---------------------------------------------------------------------------
 
+export type SessionStage = 'characteristics' | 'interview' | 'format' | 'generate'
+
 export interface SessionSummary {
   id: string
   project_name: string
   template: string
   created_at: string
-  stage: 'interview' | 'format' | 'generate'
+  stage?: SessionStage
 }
 
 export interface QAPair {
@@ -227,6 +231,7 @@ export interface SessionDetail extends SessionSummary {
   spec_text: string
   hld_json: string
   qa_pairs: QAPair[]
+  has_characteristics: boolean
 }
 
 export interface UploadedDocumentInfo {
@@ -238,6 +243,7 @@ export interface UploadedDocumentInfo {
 
 export interface UploadSessionResponse {
   session_id: string
+  project_name: string
   documents: UploadedDocumentInfo[]
   unified_spec_text: string
   created_at: string
@@ -406,6 +412,7 @@ export interface Characteristic {
   priority: number
   confidence: number
   evidence: string[]
+  summary?: string   // ≤15-word preview sentence; falls back to rationale[:80] in UI
   rationale: string
   source: string
   locked: boolean
@@ -659,4 +666,24 @@ export interface VersionHistory {
 
 export function getSessionVersions(sessionId: string): Promise<VersionHistory[]> {
   return request(`/reviews/session/${sessionId}/versions`)
+}
+
+// ── Framework / template extraction ──────────────────────────────────────────
+
+export interface ExtractedSection {
+  name: string
+  hint: string
+}
+
+export interface ExtractSectionsResponse {
+  sections: ExtractedSection[]
+}
+
+export function extractTemplateSections(file: File): Promise<ExtractSectionsResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  return request<ExtractSectionsResponse>('/framework/extract-sections', {
+    method: 'POST',
+    body: form,
+  })
 }

@@ -51,15 +51,14 @@
 .adrCard {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 24px;
-  padding: 32px;
-  display: flex; flex-direction: column;
-  transition: all .2s ease;
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  transition: border-color var(--transition-fast);
 }
 .adrCard:hover {
-  border-color: var(--color-primary-muted);
-  transform: translateY(-2px);
-  box-shadow: 0 12px 32px -8px rgba(0,0,0,.08);
+  border-color: var(--color-border-strong);
 }
 
 /* Card top row: id tag + status badge */
@@ -101,14 +100,16 @@
 
 /* Pros / cons boxes — 2-column */
 .pcGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.pcBox { background: var(--color-primary-light); border-radius: 12px; padding: 14px 16px; }
+.pcBox  { border-radius: var(--radius-md); padding: 12px 14px; }
+.pcBoxPos { background: var(--color-success-light); }
+.pcBoxNeg { background: var(--color-warning-light); }
 .pcLabelPos {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em;
-  color: var(--color-primary); margin-bottom: 6px;
+  color: #065f46; margin-bottom: 6px;
 }
 .pcLabelNeg {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em;
-  color: #f43f5e; margin-bottom: 6px;
+  color: var(--color-warning); margin-bottom: 6px;
 }
 .pcList { list-style: none; padding: 0; margin: 0; }
 .pcList li {

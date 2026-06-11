@@ -42,6 +42,36 @@
   color: var(--color-text);
 }
 
+.projectSep {
+  font-size: 18px;
+  color: var(--color-border);
+  font-weight: 300;
+  margin: 0 2px;
+  user-select: none;
+}
+
+.projectChip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-raised, var(--color-border));
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 3px 9px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectChipIcon {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
 .right {
   display: flex;
   align-items: center;

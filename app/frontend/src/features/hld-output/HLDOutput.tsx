@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { jsonrepair } from 'jsonrepair'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ChevronLeft, FileText, GitBranch, BookMarked, Download, Check, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Send } from 'lucide-react'
+import {
+  AlertTriangle, ArrowLeft, BookMarked, Check, ChevronLeft, Download,
+  FileText, GitBranch, MessageSquare, PanelLeftClose, PanelLeftOpen,
+  PanelRightClose, PanelRightOpen, Send,
+} from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Spinner } from '@/components/Spinner'
-import { AlertTriangle } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { streamHLD, saveSession, getSessionReviewStatus, getReview, getSessionFeedback, getSessionVersions, ApiError } from '@/api/client'
 import { useToast } from '@/components/Toast/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
 import type { HLDDocument, HLDEditCommand, HLDTemplate, Section } from '@/types'
-import { TEMPLATE_OPTIONS } from '@/types'
+import { FRAMEWORK_OPTIONS } from '@/types'
 import { ChatPanel } from './ChatPanel'
 import { ReviewCommunicationPanel } from './ReviewCommunicationPanel'
 import { DocumentPanel } from './DocumentPanel'
@@ -27,76 +30,71 @@ interface HLDOutputProps {
   customSections?: Section[]
   customTemplateText?: string
   preloadedHld?: HLDDocument | null
-  thoughtworksMode?: boolean
 }
 
-type Tab = 'document' | 'diagram' | 'adrs'
+type View = 'document' | 'diagram' | 'adrs'
 type GenState = 'idle' | 'generating' | 'done' | 'error'
 
-export function HLDOutput({ specText, sessionId, template, customSections, customTemplateText, preloadedHld, thoughtworksMode = false }: HLDOutputProps) {
+export function HLDOutput({
+  specText, sessionId, template, customSections,
+  customTemplateText, preloadedHld,
+}: HLDOutputProps) {
   const [searchParams] = useSearchParams()
   const reviewId = searchParams.get('review')
   const isReviewMode = !!reviewId
 
-  const [genState, setGenState] = useState<GenState>(preloadedHld ? 'done' : (isReviewMode ? 'idle' : 'idle'))
+  const [genState, setGenState]   = useState<GenState>(preloadedHld ? 'done' : 'idle')
   const [rawTokens, setRawTokens] = useState('')
-  const [hld, setHld] = useState<HLDDocument | null>(preloadedHld ?? null)
-  const [errorMsg, setErrorMsg] = useState('')
-  const tabKey = `vk_tab_${sessionId ?? reviewId ?? 'default'}`
-  const [activeTab, setActiveTab] = useState<Tab>(
-    () => (sessionStorage.getItem(tabKey) as Tab) ?? 'document'
+  const [hld, setHld]             = useState<HLDDocument | null>(preloadedHld ?? null)
+  const [errorMsg, setErrorMsg]   = useState('')
+
+  const viewKey = `vk_view_${sessionId ?? reviewId ?? 'default'}`
+  const [activeView, setActiveView] = useState<View>(
+    () => (sessionStorage.getItem(viewKey) as View) ?? 'document'
   )
-  const setTab = (tab: Tab) => { setActiveTab(tab); sessionStorage.setItem(tabKey, tab) }
-  const [editedSectionKey, setEditedSectionKey] = useState<string | null>(null)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
-  const [chatOpen, setChatOpen] = useState(() => window.innerWidth > 1100)
-  const [inboxOpen, setInboxOpen] = useState(false) // Start collapsed
+  const setView = (v: View) => { setActiveView(v); sessionStorage.setItem(viewKey, v) }
+
+  const [scrollToKey, setScrollToKey] = useState<string | null>(null)
+  const [saveStatus, setSaveStatus]   = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [chatMode, setChatMode]       = useState(false)
+  const [inboxOpen, setInboxOpen]     = useState(false)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
-  const [reviewStatus, setReviewStatus] = useState<any>(null)
+  const [reviewStatus, setReviewStatus]       = useState<any>(null)
   const [actualSessionId, setActualSessionId] = useState<string | undefined>(sessionId)
-  const [comments, setComments] = useState<import('@/types').Comment[]>([])
+  const [comments, setComments]               = useState<import('@/types').Comment[]>([])
   const [currentReviewData, setCurrentReviewData] = useState<any>(null)
-  const [versionNumber, setVersionNumber] = useState<number | null>(null)
-  const [versionId, setVersionId] = useState<string | null>(null)
+  const [versionNumber, setVersionNumber]     = useState<number | null>(null)
+  const [versionId, setVersionId]             = useState<string | null>(null)
+
   const { showToast } = useToast()
-  const { user } = useAuth()
-  const pendingSaveRef = useRef<boolean>(false)
+  const { user }      = useAuth()
+  const abortRef      = useRef<AbortController | null>(null)
+  const saveTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const navigate      = useNavigate()
 
   // Load HLD from review if in review mode
   useEffect(() => {
     if (reviewId && !preloadedHld) {
-      console.log('Loading review:', reviewId)
       setGenState('generating')
       setErrorMsg('')
-
       getReview(reviewId)
         .then((data) => {
-          console.log('Review data received:', data)
           try {
             const hldDoc: HLDDocument = JSON.parse(data.hld_json)
-            console.log('HLD parsed successfully:', hldDoc.project_name)
             setHld(hldDoc)
             setActualSessionId(data.session_id)
             setComments(data.comments || [])
-            setCurrentReviewData(data.review) // Store the review details including status
-
-            // Get version_id from review to filter feedback
-            if (data.review?.version_id) {
-              setVersionId(data.review.version_id)
-            }
-
+            setCurrentReviewData(data.review)
+            if (data.review?.version_id) setVersionId(data.review.version_id)
             setGenState('done')
             showToast('HLD loaded successfully', 'success')
-          } catch (e) {
-            console.error('Failed to parse HLD JSON:', e)
-            console.error('Raw HLD JSON:', data.hld_json)
+          } catch {
             setErrorMsg('Failed to parse HLD data')
             setGenState('error')
             showToast('Failed to parse HLD data', 'error')
           }
         })
         .catch((error: any) => {
-          console.error('Failed to fetch review:', error)
           setErrorMsg(error.message || 'Failed to load review')
           setGenState('error')
           showToast(error.message || 'Failed to load review', 'error')
@@ -104,32 +102,17 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
     }
   }, [reviewId, preloadedHld, showToast])
 
-  // Load feedback for authors (when not in review mode but have sessionId)
+  // Load feedback for authors
   useEffect(() => {
     const effectiveSessionId = actualSessionId || sessionId
     if (!reviewId && effectiveSessionId && hld && user?.role === 'author') {
-      console.log('Loading feedback for author:', effectiveSessionId)
       getSessionFeedback(effectiveSessionId)
-        .then((data) => {
-          console.log('Feedback received:', data)
-          setComments(data.comments || [])
-        })
-        .catch((error: any) => {
-          console.error('Failed to load feedback:', error)
-          // Don't show error toast, feedback is optional
-        })
+        .then((data) => setComments(data.comments || []))
+        .catch(() => { /* feedback is optional */ })
     }
   }, [reviewId, actualSessionId, sessionId, hld, user])
 
-  // Keep sidebar state in sync with viewport resize
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 1100px)')
-    const handler = (e: MediaQueryListEvent) => setChatOpen(!e.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [])
-
-  // Poll review status every 10 seconds and fetch version number
+  // Poll review status every 10 seconds
   useEffect(() => {
     const effectiveSessionId = actualSessionId || sessionId
     if (!effectiveSessionId) return
@@ -138,31 +121,20 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
       try {
         const status = await getSessionReviewStatus(effectiveSessionId)
         setReviewStatus(status)
-
-        // Fetch version information
         const versions = await getSessionVersions(effectiveSessionId)
         if (versions.length > 0) {
-          // Get the latest version
-          const latestVersion = versions[0] // Already sorted by version_number desc
-          setVersionNumber(latestVersion.version_number)
-
-          // Set versionId for authors viewing their own HLD (critical for version isolation)
-          if (!reviewId && user?.role === 'author') {
-            setVersionId(latestVersion.version_id)
-          }
+          const latest = versions[0]
+          setVersionNumber(latest.version_number)
+          if (!reviewId && user?.role === 'author') setVersionId(latest.version_id)
         }
-      } catch (error) {
-        // Silently fail - status is optional
-      }
+      } catch { /* silently fail */ }
     }
 
     fetchStatus()
-    const interval = setInterval(fetchStatus, 10000) // Poll every 10s
+    const interval = setInterval(fetchStatus, 10000)
     return () => clearInterval(interval)
   }, [actualSessionId, sessionId, reviewId, user])
-  const abortRef = useRef<AbortController | null>(null)
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const navigate = useNavigate()
+
 
   const generate = useCallback(async () => {
     if (!specText || !template || preloadedHld || isReviewMode) return
@@ -179,8 +151,6 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
         template,
         (token) => {
           accumulated += token
-          // Throttle React re-renders to ≤ ~10/sec so extractLiveData's full-string
-          // regexes don't turn O(n²) on a large token stream.
           const now = Date.now()
           if (now - lastRenderMs >= 100) {
             lastRenderMs = now
@@ -188,7 +158,6 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
           }
         },
         (cleanedJson) => {
-          // Flush any throttled tokens so the progress panel shows 100% briefly
           setRawTokens(accumulated)
           try {
             const jsonToParse = cleanedJson || extractJson(accumulated)
@@ -200,7 +169,6 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
             )
           } catch (e) {
             console.error('Parse failed:', e)
-            console.error('Cleaned JSON (last 500 chars):', (cleanedJson || accumulated).slice(-500))
             const msg = 'Generated output was malformed. Please try again.'
             setErrorMsg(msg)
             setGenState('error')
@@ -210,7 +178,6 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
         abortRef.current.signal,
         customSections?.map(s => s.name),
         customTemplateText,
-        thoughtworksMode,
       )
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return
@@ -219,13 +186,16 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
       setGenState('error')
       showToast(msg, 'error')
     }
-  }, [specText, template, customSections, customTemplateText, thoughtworksMode])
+  }, [specText, template, customSections, customTemplateText])
 
   useEffect(() => {
     generate()
     return () => { abortRef.current?.abort() }
   }, [generate])
 
+  // ---------------------------------------------------------------------------
+  // Export
+  // ---------------------------------------------------------------------------
   const handleExport = useCallback(() => {
     if (!hld) return
     const lines: string[] = [`# ${hld.project_name}\n`]
@@ -256,9 +226,9 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
       }
     }
     const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
     a.download = `${hld.project_name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_hld.md`
     document.body.appendChild(a)
     a.click()
@@ -266,6 +236,9 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
     URL.revokeObjectURL(url)
   }, [hld])
 
+  // ---------------------------------------------------------------------------
+  // Section edits (inline + chat-driven)
+  // ---------------------------------------------------------------------------
   const handleSectionEdit = (key: string, content: string) => {
     if (!hld) return
     const updated = {
@@ -331,11 +304,7 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
           ...prev,
           sections: prev.sections.map(s => {
             if (s.key !== cmd.key) return s
-            return {
-              ...s,
-              content: cmd.content,
-              ...(cmd.title ? { title: cmd.title } : {}),
-            }
+            return { ...s, content: cmd.content, ...(cmd.title ? { title: cmd.title } : {}) }
           }),
         }
       }
@@ -345,8 +314,7 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
           ...prev,
           adrs: prev.adrs.map(a => {
             if (a.id !== cmd.id) return a
-            const field = cmd.field as keyof typeof a
-            return { ...a, [field]: cmd.value }
+            return { ...a, [cmd.field as keyof typeof a]: cmd.value }
           }),
         }
       }
@@ -354,9 +322,16 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
       return prev
     })
 
-    setEditedSectionKey(cmd.type === 'update_section' ? cmd.key : null)
+    if (cmd.type === 'update_section') {
+      // Switch to document view and scroll to edited section
+      setView('document')
+      setScrollToKey(cmd.key)
+    }
   }, [])
 
+  // ---------------------------------------------------------------------------
+  // Loading / error states
+  // ---------------------------------------------------------------------------
   if (genState === 'generating') {
     // If in review mode, show a simple loading screen instead of GeneratingPanel
     if (isReviewMode) {
@@ -375,7 +350,7 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
         template={template}
         customSections={customSections}
         rawTokens={rawTokens}
-        onCancel={() => { abortRef.current?.abort(); navigate('/format') }}
+        onCancel={() => { abortRef.current?.abort(); navigate('/framework') }}
       />
     )
   }
@@ -387,7 +362,7 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
         <h2>Generation failed</h2>
         <p className={styles.errorDetail}>{errorMsg}</p>
         <div className={styles.errorActions}>
-          <Button variant="secondary" onClick={() => navigate('/format')}>← Back</Button>
+          <Button variant="secondary" onClick={() => navigate('/framework')}>← Back</Button>
           <Button onClick={generate}>Try again</Button>
         </div>
       </div>
@@ -396,122 +371,132 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
 
   if (!hld) return null
 
-  // Check if we should show Review Inbox
   const effectiveSessionId = actualSessionId || sessionId
-  // Show inbox if: (1) in review mode, (2) has reviews, OR (3) is author with a session (to see feedback)
   const showReviewInbox = isReviewMode || reviewStatus?.has_reviews || (user?.role === 'author' && effectiveSessionId)
 
   return (
     <div className={styles.shell}>
-      {/* LEFT — AI Chat (collapsible) */}
-      <aside className={`${styles.chatCol} ${!chatOpen ? styles.chatColCollapsed : ''}`} aria-label="Architecture sidekick">
-        {chatOpen && (
-          <ChatPanel
-            hld={hld}
-            sessionId={actualSessionId}
-            onEdit={user?.role === 'reviewer' || isReviewMode ? undefined : handleChatEdit}
-          />
-        )}
-      </aside>
 
-      {/* Main — tabs + content */}
-      <div className={styles.mainCol}>
-        <header className={styles.mainHeader}>
-          {/* Left: sidebar toggle + breadcrumb */}
-          <div className={styles.headerLeft}>
+      {/* ── Top bar: breadcrumb | tabs | actions ── */}
+      <header className={styles.topBar}>
+        {/* Left: breadcrumb */}
+        <button className={styles.backBtn} onClick={() => navigate(isReviewMode ? '/dashboard' : '/framework')}>
+          <ChevronLeft size={14} />
+          <span className={styles.backBrand}>Vishwakarma</span>
+          <span className={styles.backSep}>/</span>
+          <span className={styles.backProject}>
+            {hld.project_name}{versionNumber ? ` (v${versionNumber})` : ''}
+          </span>
+        </button>
+
+        {/* Center: pill tabs */}
+        <nav className={styles.tabGroup} role="tablist" aria-label="HLD view">
+          <TabButton id="tab-document" active={activeView === 'document'} icon={<FileText size={13} />} label="Document" onClick={() => setView('document')} />
+          <TabButton id="tab-diagram" active={activeView === 'diagram'} icon={<GitBranch size={13} />} label="Diagram" onClick={() => setView('diagram')} />
+          <TabButton id="tab-adrs" active={activeView === 'adrs'} icon={<BookMarked size={13} />} label={`ADRs${hld.adrs.length > 0 ? ` (${hld.adrs.length})` : ''}`} onClick={() => setView('adrs')} />
+        </nav>
+
+        {/* Right: save indicator + export + submit + inbox toggle */}
+        <div className={styles.topBarActions}>
+          {saveStatus === 'saving' && (
+            <span className={styles.saveStatus}>Saving…</span>
+          )}
+          {saveStatus === 'saved' && (
+            <span className={`${styles.saveStatus} ${styles.saveStatusSaved}`}>
+              <Check size={11} /> Saved
+            </span>
+          )}
+          {user?.role === 'author' && !isReviewMode && (
+            <button
+              className={styles.submitBtn}
+              onClick={handleSubmitClick}
+              title="Submit for Review"
+            >
+              <Send size={13} /> Submit for Review
+            </button>
+          )}
+          <button className={styles.exportBtn} onClick={handleExport} title="Export as Markdown">
+            <Download size={13} /> Export
+          </button>
+          {showReviewInbox && (
             <button
               className={styles.sidebarToggle}
-              onClick={() => setChatOpen(o => !o)}
-              title={chatOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-              aria-label={chatOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+              onClick={() => setInboxOpen(o => !o)}
+              title={inboxOpen ? 'Hide review inbox' : 'Show review inbox'}
+              aria-label={inboxOpen ? 'Hide review inbox' : 'Show review inbox'}
             >
-              {chatOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+              {inboxOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
             </button>
-            <button className={styles.backBtn} onClick={() => navigate(isReviewMode ? '/dashboard' : '/format')}>
-              <ChevronLeft size={14} /> <span className={styles.backLabel}>Vishwakarma</span>
-              <span className={styles.backSep}>/</span>
-              <span className={styles.backCurrent}>
-                {hld.project_name}
-                {versionNumber && ` (v${versionNumber})`}
-              </span>
-            </button>
+          )}
+        </div>
+      </header>
 
-          </div>
+      {/* ── Body: nav panel + content ── */}
+      <div className={styles.body}>
 
-          {/* Center: pill tab group */}
-          <nav className={styles.tabGroup} role="tablist" aria-label="HLD view">
-            <TabButton id="tab-document" active={activeTab === 'document'} icon={<FileText size={13} />} label="Document" onClick={() => setTab('document')} />
-            <TabButton id="tab-diagram" active={activeTab === 'diagram'} icon={<GitBranch size={13} />} label="Diagram" onClick={() => setTab('diagram')} />
-            <TabButton id="tab-adrs" active={activeTab === 'adrs'} icon={<BookMarked size={13} />} label={`ADRs${hld ? ` (${hld.adrs.length})` : ''}`} onClick={() => setTab('adrs')} />
-          </nav>
+        {/* Left nav panel */}
+        <aside className={styles.navPanel} aria-label={chatMode ? 'Chat' : 'Navigation'}>
+          {chatMode ? (
+            /* ── Chat mode ── */
+            <>
+              <div className={styles.chatNavHeader}>
+                <button className={styles.chatNavBack} onClick={() => setChatMode(false)}>
+                  <ArrowLeft size={12} /> Back
+                </button>
+              </div>
+              <div className={styles.chatPanelWrap}>
+                <ChatPanel hld={hld} sessionId={sessionId} onEdit={handleChatEdit} />
+              </div>
+            </>
+          ) : (
+            /* ── Nav mode ── */
+            <>
+              {/* Project info */}
+              <div className={styles.navProject}>
+                <span className={styles.navTemplateBadge}>{hld.template}</span>
+                <h1 className={styles.navProjectName}>{hld.project_name}</h1>
+                <p className={styles.navProjectMeta}>
+                  {hld.sections.length} sections · {hld.adrs.length} ADRs
+                </p>
+              </div>
 
-          {/* Right: save indicator + export + submit + inbox toggle */}
-          <span className={styles.headerRight}>
-            {saveStatus === 'saving' && (
-              <span className={styles.saveStatus}>Saving…</span>
-            )}
-            {saveStatus === 'saved' && (
-              <span className={`${styles.saveStatus} ${styles.saveStatusSaved}`}>
-                <Check size={11} /> Saved
-              </span>
-            )}
-            {user?.role === 'author' && !isReviewMode && (
-              <button
-                className={styles.submitBtn}
-                onClick={handleSubmitClick}
-                title="Submit for Review"
-              >
-                <Send size={13} /> Submit for Review
-              </button>
-            )}
-            <button className={styles.exportBtn} onClick={handleExport} title="Export as Markdown">
-              <Download size={13} /> Export
-            </button>
-            {showReviewInbox && (
-              <button
-                className={styles.sidebarToggle}
-                onClick={() => setInboxOpen(o => !o)}
-                title={inboxOpen ? 'Hide review inbox' : 'Show review inbox'}
-                aria-label={inboxOpen ? 'Hide review inbox' : 'Show review inbox'}
-              >
-                {inboxOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
-              </button>
-            )}
-          </span>
-        </header>
+              {/* Chat toggle */}
+              <div className={styles.navBottom}>
+                <button className={styles.chatOpenBtn} onClick={() => setChatMode(true)}>
+                  <MessageSquare size={13} />
+                  <span>Chat with AI</span>
+                </button>
+              </div>
+            </>
+          )}
+        </aside>
 
-        <div
-          className={styles.contentArea}
-          role="tabpanel"
-          aria-labelledby={
-            activeTab === 'document' ? 'tab-document'
-            : activeTab === 'diagram' ? 'tab-diagram'
-            : 'tab-adrs'
-          }
-        >
-          {activeTab === 'document' ? (
+        {/* Content area */}
+        <main className={styles.content}>
+          {activeView === 'document' && (
             <div className={styles.docScroll}>
               <DocumentPanel
                 hld={hld}
                 onSectionEdit={user?.role === 'reviewer' || isReviewMode ? undefined : handleSectionEdit}
-                scrollToKey={editedSectionKey}
-                onScrolled={() => setEditedSectionKey(null)}
+                scrollToKey={scrollToKey}
+                onScrolled={() => setScrollToKey(null)}
                 reviewId={reviewId}
                 comments={comments}
                 canComment={isReviewMode}
                 onCommentsChange={() => {
-                  // Reload review to get updated comments
                   if (reviewId) {
                     getReview(reviewId).then(data => setComments(data.comments || []))
                   }
                 }}
               />
             </div>
-          ) : activeTab === 'diagram' ? (
+          )}
+          {activeView === 'diagram' && (
             <div className={styles.diagramWrap}>
               <DiagramPanel diagrams={hld.diagrams} />
             </div>
-          ) : (
+          )}
+          {activeView === 'adrs' && (
             <div className={styles.docScroll}>
               <ADRPanel
                 hld={hld}
@@ -527,7 +512,8 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
               />
             </div>
           )}
-        </div>
+        </main>
+
       </div>
 
       {/* RIGHT — Review Inbox (collapsible, only when reviews exist) */}
@@ -575,13 +561,65 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
   )
 }
 
-/** Robustly extract the outermost JSON object from LLM output.
- *  Handles markdown fences, preamble text, trailing text, and common LLM JSON quirks. */
+// ---------------------------------------------------------------------------
+// TabButton — centered pill tab in the top bar
+// ---------------------------------------------------------------------------
+function TabButton({
+  id, active, icon, label, onClick,
+}: {
+  id: string
+  active: boolean
+  icon: React.ReactNode
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      id={id}
+      role="tab"
+      aria-selected={active}
+      className={`${styles.tab} ${active ? styles.tabActive : ''}`}
+      onClick={onClick}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// NavItem
+// ---------------------------------------------------------------------------
+function NavItem({
+  active, icon, label, badge, onClick,
+}: {
+  active: boolean
+  icon: React.ReactNode
+  label: string
+  badge?: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      className={`${styles.navItem} ${active ? styles.navItemActive : ''}`}
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+    >
+      <span className={styles.navItemIcon}>{icon}</span>
+      <span className={styles.navItemLabel}>{label}</span>
+      {badge && <span className={styles.navItemBadge}>{badge}</span>}
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// JSON extraction helper
+// ---------------------------------------------------------------------------
 function extractJson(raw: string): string {
-  let text = raw.trim().replace(/^```[a-z]*\r?\n?/m, '').replace(/\r?\n?```$/m, '').trim()
+  const text  = raw.trim().replace(/^```[a-z]*\r?\n?/m, '').replace(/\r?\n?```$/m, '').trim()
   const start = text.indexOf('{')
-  const end = text.lastIndexOf('}')
-  if (start === -1 || end === -1 || end <= start) throw new Error('No JSON object found in LLM output')
+  const end   = text.lastIndexOf('}')
+  if (start === -1 || end === -1 || end <= start) throw new Error('No JSON object found')
   const candidate = text.slice(start, end + 1)
   try {
     JSON.parse(candidate)
@@ -591,86 +629,58 @@ function extractJson(raw: string): string {
   }
 }
 
-
 // ---------------------------------------------------------------------------
-// Helpers — extract live section data from the raw SSE token stream
+// Live stream data extraction (generating panel)
 // ---------------------------------------------------------------------------
-
-function extractLiveData(raw: string): {
-  projectName: string
-  completedTitles: string[]
-  activeTitle: string
-  activeContent: string
-} {
-  // All "title" values seen so far
-  const allTitles = [...raw.matchAll(/"title":\s*"([^"\\]+)"/g)].map(m => m[1])
-
-  // Project name (appears early in the stream)
-  const projectName = raw.match(/"project_name":\s*"([^"\\]+)"/)?.[1] ?? ''
-
-  // Find the last open "content": " to get the text being typed right now
-  const contentIdx = raw.lastIndexOf('"content": "')
-  let activeContent = ''
+function extractLiveData(raw: string) {
+  const allTitles    = [...raw.matchAll(/"title":\s*"([^"\\]+)"/g)].map(m => m[1])
+  const projectName  = raw.match(/"project_name":\s*"([^"\\]+)"/)?.[1] ?? ''
+  const contentIdx   = raw.lastIndexOf('"content": "')
+  let activeContent  = ''
   if (contentIdx !== -1) {
-    const raw2 = raw.slice(contentIdx + 12)
-    activeContent = raw2
-      .replace(/\\n/g, '\n')
-      .replace(/\\t/g, '\t')
-      .replace(/\\"/g, '"')
-      .replace(/\\\\/g, '\\')
-      .replace(/\\r/g, '')
-      // trim any trailing partial escape sequence
-      .replace(/\\[ntr"\\]?$/, '')
+    activeContent = raw.slice(contentIdx + 12)
+      .replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\').replace(/\\r/g, '').replace(/\\[ntr"\\]?$/, '')
   }
-
-  // The active (currently writing) section is the last title seen
-  const activeTitle = allTitles[allTitles.length - 1] ?? ''
-  // Completed sections are all titles before the active one
+  const activeTitle     = allTitles[allTitles.length - 1] ?? ''
   const completedTitles = allTitles.slice(0, -1)
-
   return { projectName, completedTitles, activeTitle, activeContent }
 }
 
 // ---------------------------------------------------------------------------
 // GeneratingPanel
 // ---------------------------------------------------------------------------
-
 function GeneratingPanel({
-  template,
-  customSections,
-  rawTokens,
-  onCancel,
+  template, customSections, rawTokens, onCancel,
 }: {
   template: HLDTemplate
   customSections?: Section[]
   rawTokens: string
   onCancel: () => void
 }) {
-  const templateOpt = TEMPLATE_OPTIONS.find(t => t.id === template)
-  const sections = customSections?.map(s => s.name) ?? templateOpt?.default_sections ?? [
+  const templateOpt = FRAMEWORK_OPTIONS.find(t => t.id === template)
+  const sections    = customSections?.map(s => s.name) ?? templateOpt?.default_sections ?? [
     'Overview', 'Architecture', 'ADRs', 'Diagrams', 'Risks',
   ]
 
   const { projectName, completedTitles, activeTitle, activeContent } = extractLiveData(rawTokens)
-
-  // Accurate section progress from the parsed stream
-  const doneCount  = completedTitles.length
-  const activeIdx  = Math.min(doneCount, sections.length - 1)
-  const pct        = sections.length > 0
+  const doneCount = completedTitles.length
+  const activeIdx = Math.min(doneCount, sections.length - 1)
+  const pct       = sections.length > 0
     ? Math.min(Math.round((doneCount / sections.length) * 100), 95)
     : 0
 
   return (
     <div className={styles.genLayout}>
       <AppHeader />
-
       <div className={styles.genBody}>
+
         {/* Left: section checklist */}
         <div className={styles.genLeft}>
           <p className={styles.genEyebrow}>Generating</p>
-          <h2 className={styles.genTitle}>Building your HLD…</h2>
+          <h2 className={styles.genTitle}>Building your document…</h2>
           <p className={styles.genSub}>
-            {projectName ? `"${projectName}"` : 'Claude is writing sections, ADRs, and C4 diagrams.'}
+            {projectName ? `"${projectName}"` : 'Writing sections, ADRs, and C4 diagrams.'}
           </p>
 
           <div className={styles.genProgressWrap}>
@@ -704,7 +714,7 @@ function GeneratingPanel({
           </div>
         </div>
 
-        {/* Right: live human-readable section preview */}
+        {/* Right: live preview */}
         <div className={styles.genRight}>
           <div className={styles.genRightHeader}>
             <span className={styles.genRightDot} />
@@ -715,7 +725,6 @@ function GeneratingPanel({
           </div>
 
           <div className={styles.genLiveBody}>
-            {/* Completed sections — compact chips */}
             {completedTitles.length > 0 && (
               <div className={styles.genDoneList}>
                 {completedTitles.map((t, i) => (
@@ -727,7 +736,6 @@ function GeneratingPanel({
               </div>
             )}
 
-            {/* Active section being written */}
             {activeTitle ? (
               <div className={styles.genActiveSection}>
                 <p className={styles.genActiveSectionTitle}>{activeTitle}</p>
@@ -739,39 +747,13 @@ function GeneratingPanel({
             ) : (
               <div className={styles.genWaitingWrap}>
                 <span className={styles.genRightDot} style={{ width: 10, height: 10 }} />
-                <span className={styles.genWaiting}>Waiting for Claude…</span>
+                <span className={styles.genWaiting}>Waiting…</span>
               </div>
             )}
           </div>
         </div>
+
       </div>
     </div>
-  )
-}
-
-function TabButton({
-  id,
-  active,
-  icon,
-  label,
-  onClick,
-}: {
-  id: string
-  active: boolean
-  icon: React.ReactNode
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      id={id}
-      role="tab"
-      aria-selected={active}
-      className={`${styles.tab} ${active ? styles.tabActive : ''}`}
-      onClick={onClick}
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
   )
 }

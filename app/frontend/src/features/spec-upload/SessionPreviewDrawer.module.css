@@ -44,6 +44,23 @@
 }
 @keyframes shimmer { from { opacity: 0.5 } to { opacity: 1 } }
 
+/* Switch banner — shown when resuming a different project */
+.switchBanner {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+.switchFrom {
+  color: var(--color-text-muted);
+  max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-decoration: line-through; opacity: 0.7;
+}
+.switchArrow { color: var(--color-text-muted); flex-shrink: 0; }
+.switchTo {
+  color: var(--color-text); font-weight: 600;
+  max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 .headerTags { display: flex; align-items: center; gap: 8px; }
 .templateBadge {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;

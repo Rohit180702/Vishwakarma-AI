@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, FileText, MessageSquare, LayoutTemplate, ExternalLink, CheckCircle2, SkipForward, ChevronRight, Play } from 'lucide-react'
+import { X, FileText, MessageSquare, LayoutTemplate, ExternalLink, CheckCircle2, SkipForward, ChevronRight, Play, ArrowRight } from 'lucide-react'
 import type { SessionDetail, QAPair } from '@/api/client'
 import type { HLDDocument, HLDTemplate } from '@/types'
 import styles from './SessionPreviewDrawer.module.css'
@@ -11,19 +11,21 @@ interface SessionPreviewDrawerProps {
   loading: boolean
   onClose: () => void
   onResume: () => void
+  currentProjectName?: string | null
 }
 
 /** Determine what stage the session last reached */
-export function sessionResumeStage(detail: SessionDetail): 'interview' | 'format' | 'generate' {
+export function sessionResumeStage(detail: SessionDetail): 'characteristics' | 'interview' | 'format' | 'generate' {
   try {
     const hld = JSON.parse(detail.hld_json) as HLDDocument
     if (hld.sections?.length > 0) return 'generate'
   } catch { /* empty */ }
   if (detail.qa_pairs.length > 0) return 'format'
-  return 'interview'
+  if (detail.has_characteristics) return 'interview'
+  return 'characteristics'
 }
 
-export function SessionPreviewDrawer({ detail, loading, onClose, onResume }: SessionPreviewDrawerProps) {
+export function SessionPreviewDrawer({ detail, loading, onClose, onResume, currentProjectName }: SessionPreviewDrawerProps) {
   const [stage, setStage] = useState<Stage>('spec')
   const overlayRef = useRef<HTMLDivElement>(null)
 
@@ -36,10 +38,13 @@ export function SessionPreviewDrawer({ detail, loading, onClose, onResume }: Ses
   }, [onClose])
 
   const resumeStage  = detail ? sessionResumeStage(detail) : null
-  const resumeLabel  = resumeStage === 'generate' ? 'Open full HLD'
-                     : resumeStage === 'format'   ? 'Continue to template →'
-                     :                              'Resume interview →'
+  const resumeLabel  = resumeStage === 'generate'        ? 'Open document'
+                     : resumeStage === 'format'           ? 'Continue to framework →'
+                     : resumeStage === 'interview'        ? 'Resume interview →'
+                     :                                     'Go to characteristics →'
   const ResumeIcon   = resumeStage === 'generate' ? ExternalLink : Play
+
+  const isSwitching = !!currentProjectName && !!detail && currentProjectName !== detail.project_name
 
   const visible = loading || !!detail
 
@@ -67,9 +72,16 @@ export function SessionPreviewDrawer({ detail, loading, onClose, onResume }: Ses
               <div className={styles.loadingName} />
             ) : detail ? (
               <>
+                {isSwitching && (
+                  <div className={styles.switchBanner}>
+                    <span className={styles.switchFrom}>{currentProjectName}</span>
+                    <ArrowRight size={11} className={styles.switchArrow} />
+                    <span className={styles.switchTo}>{detail.project_name}</span>
+                  </div>
+                )}
                 <h2 className={styles.projectName}>{detail.project_name}</h2>
                 <div className={styles.headerTags}>
-                  <span className={styles.templateBadge}>{detail.template}</span>
+                  {detail.template && <span className={styles.templateBadge}>{detail.template}</span>}
                   <span className={styles.dateBadge}>
                     {new Date(detail.created_at).toLocaleDateString(undefined, {
                       month: 'short', day: 'numeric', year: 'numeric',
@@ -86,9 +98,9 @@ export function SessionPreviewDrawer({ detail, loading, onClose, onResume }: Ses
 
         {/* Stage tabs */}
         <div className={styles.tabs} role="tablist">
-          <StageTab id="spec" active={stage === 'spec'} icon={<FileText size={13} />} label="Spec" onClick={() => setStage('spec')} />
+          <StageTab id="spec" active={stage === 'spec'} icon={<FileText size={13} />} label="Requirements" onClick={() => setStage('spec')} />
           <StageTab id="interview" active={stage === 'interview'} icon={<MessageSquare size={13} />} label="Interview" onClick={() => setStage('interview')} />
-          <StageTab id="hld" active={stage === 'hld'} icon={<LayoutTemplate size={13} />} label="HLD Output" onClick={() => setStage('hld')} />
+          <StageTab id="hld" active={stage === 'hld'} icon={<LayoutTemplate size={13} />} label="Document" onClick={() => setStage('hld')} />
         </div>
 
         {/* Stage progress indicator */}
@@ -149,7 +161,7 @@ export function SessionPreviewDrawer({ detail, loading, onClose, onResume }: Ses
 
 function SpecStage({ specText }: { specText: string }) {
   if (!specText) {
-    return <EmptyState label="No specification file found for this session." />
+    return <EmptyState label="No requirements document found for this session." />
   }
   const preview = specText.length > 1200 ? specText.slice(0, 1200) + '\n\n…' : specText
   return (
@@ -212,7 +224,7 @@ function HLDStage({ hldJson }: { hldJson: string }) {
   try { hld = JSON.parse(hldJson) } catch { /* empty */ }
 
   if (!hld || !hld.sections?.length) {
-    return <EmptyState label="HLD output not yet generated for this session." />
+    return <EmptyState label="Document not yet generated for this session." />
   }
 
   return (

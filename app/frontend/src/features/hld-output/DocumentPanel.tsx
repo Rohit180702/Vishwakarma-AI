@@ -182,7 +182,7 @@ export function DocumentPanel({
             {/* ── Body — hidden when collapsed ── */}
             {!isCollapsed && (
               <div className={styles.sectionBody}>
-                <div className={styles.sectionActions}>
+                <div className={`${styles.sectionActions} ${isEditing ? styles.sectionActionsEditing : ''}`}>
                   {isEditing ? (
                     <>
                       <button
