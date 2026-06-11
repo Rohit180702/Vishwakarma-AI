@@ -6,7 +6,13 @@ html { font-size: 16px; -webkit-font-smoothing: antialiased; }
 
 body {
   font-family: var(--font-ui);
-  background: var(--color-surface-2); /* #f1f5f9 page tint */
+  background:
+    radial-gradient(at 0% 0%,   hsla(238, 100%, 96%, 1) 0, transparent 55%),
+    radial-gradient(at 50% 0%,  hsla(255, 100%, 96%, 1) 0, transparent 55%),
+    radial-gradient(at 100% 0%, hsla(245, 100%, 96%, 1) 0, transparent 55%),
+    radial-gradient(at 50% 100%,hsla(260, 100%, 97%, 1) 0, transparent 55%),
+    #f8fafc;
+  background-attachment: fixed;
   color: var(--color-text);
   min-height: 100dvh;
 }

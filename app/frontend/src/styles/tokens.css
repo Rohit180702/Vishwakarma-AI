@@ -39,7 +39,7 @@
   --font-ui:  'Inter', system-ui, sans-serif;
   --font-doc: 'Source Serif 4', Georgia, serif;
 
-  /* Spacing scale */
+  /* Spacing scale — 4px base, powers of 2 above 48px */
   --space-1:  4px;
   --space-2:  8px;
   --space-3:  12px;
@@ -49,6 +49,16 @@
   --space-8:  32px;
   --space-10: 40px;
   --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+  --space-32: 128px;
+  --space-40: 160px;
+
+  /* Viewport-relative spacing — use for offsets that should scale with screen size */
+  --offset-sm:  5vh;
+  --offset-md:  10vh;
+  --offset-lg:  20vh;
 
   /* Radius */
   --radius-sm:   6px;
