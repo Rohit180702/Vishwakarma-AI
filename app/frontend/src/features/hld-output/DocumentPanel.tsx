@@ -4,7 +4,8 @@ import remarkGfm from 'remark-gfm'
 import mermaid from 'mermaid'
 import { ChevronDown } from 'lucide-react'
 import type { Components } from 'react-markdown'
-import type { HLDSection, HLDDocument } from '@/types'
+import type { HLDSection, HLDDocument, Comment } from '@/types'
+import { CommentSection } from './CommentSection'
 import styles from './DocumentPanel.module.css'
 
 // ---------------------------------------------------------------------------
@@ -73,9 +74,22 @@ interface DocumentPanelProps {
   scrollToKey?: string | null
   /** Called once the scroll has been triggered, so parent can clear the key */
   onScrolled?: () => void
+  reviewId?: string | null
+  comments?: Comment[]
+  canComment?: boolean
+  onCommentsChange?: () => void
 }
 
-export function DocumentPanel({ hld, onSectionEdit, scrollToKey, onScrolled }: DocumentPanelProps) {
+export function DocumentPanel({
+  hld,
+  onSectionEdit,
+  scrollToKey,
+  onScrolled,
+  reviewId,
+  comments = [],
+  canComment = false,
+  onCommentsChange
+}: DocumentPanelProps) {
   const [editingKey, setEditingKey]   = useState<string | null>(null)
   const [draftContent, setDraftContent] = useState('')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -212,6 +226,17 @@ export function DocumentPanel({ hld, onSectionEdit, scrollToKey, onScrolled }: D
                       {section.content}
                     </ReactMarkdown>
                   </div>
+                )}
+
+                {/* Comment section for reviewers */}
+                {reviewId && (
+                  <CommentSection
+                    reviewId={reviewId}
+                    sectionKey={section.key}
+                    comments={comments}
+                    canComment={canComment}
+                    onCommentAdded={() => onCommentsChange?.()}
+                  />
                 )}
               </div>
             )}

@@ -3,9 +3,23 @@
  * Throws typed ApiError on non-2xx; callers never need to check status manually.
  */
 
-import type { HLDDocument, HLDEditCommand, HLDTemplate } from '@/types'
+import type { HLDDocument, HLDEditCommand, HLDTemplate, LoginResponse, User, UserRole } from '@/types'
 
 const BASE = '/api/v1'
+const TOKEN_KEY = 'vk_auth_token'
+
+// Token management
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function setToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token)
+}
+
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY)
+}
 
 export class ApiError extends Error {
   constructor(
@@ -22,9 +36,22 @@ async function request<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
+  const token = getToken()
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+
+  // Add Authorization header if token exists
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...init.headers },
     ...init,
+    headers: {
+      ...headers,
+      ...(init.headers as Record<string, string>),
+    },
   })
 
   if (!res.ok) {
@@ -34,6 +61,67 @@ async function request<T>(
   }
 
   return res.json() as Promise<T>
+}
+
+// ---------------------------------------------------------------------------
+// Authentication
+// ---------------------------------------------------------------------------
+
+export async function login(email: string, password: string): Promise<LoginResponse> {
+  const response = await request<LoginResponse>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+
+  // Store token
+  setToken(response.access_token)
+
+  return response
+}
+
+export async function register(
+  email: string,
+  password: string,
+  name: string,
+  role: UserRole,
+): Promise<LoginResponse> {
+  const response = await request<LoginResponse>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ email, password, name, role }),
+  })
+
+  // Store token
+  setToken(response.access_token)
+
+  return response
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await request('/auth/logout', { method: 'POST' })
+  } finally {
+    clearToken()
+  }
+}
+
+export async function getCurrentUser(): Promise<User> {
+  return request<User>('/auth/me')
+}
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+
+export interface UserSummary {
+  id: string
+  email: string
+  name: string
+  role: UserRole
+  avatar_url?: string
+}
+
+export async function listUsers(): Promise<UserSummary[]> {
+  return request<UserSummary[]>('/users')
 }
 
 // ---------------------------------------------------------------------------
@@ -480,4 +568,95 @@ export interface EnhancedSpecResponse {
 
 export function getEnhancedSpec(sessionId: string): Promise<EnhancedSpecResponse> {
   return request<EnhancedSpecResponse>(`/interview/${sessionId}/enhanced-spec`)
+}
+
+// ---------------------------------------------------------------------------
+// Reviews
+// ---------------------------------------------------------------------------
+
+export interface SubmitReviewRequest {
+  session_id: string
+  hld_json: string
+  reviewer_ids: string[]
+  message?: string
+}
+
+export function submitForReview(data: SubmitReviewRequest): Promise<{message: string; version_id: string; review_request_ids: string[]}> {
+  return request('/reviews/submit', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+}
+
+export function getMySubmissions(): Promise<import('@/types').ReviewSummary[]> {
+  return request('/reviews/my-submissions')
+}
+
+export function getPendingReviews(): Promise<import('@/types').ReviewSummary[]> {
+  return request('/reviews/pending')
+}
+
+export function getSessionReviewStatus(sessionId: string): Promise<{
+  session_id: string
+  has_reviews: boolean
+  status: string
+  reviewers: Array<{id: string; name: string; status: string; reviewed_at: string | null}>
+  submitted_at: string | null
+}> {
+  return request(`/reviews/status/${sessionId}`)
+}
+
+export function getReview(reviewId: string): Promise<import('@/types').ReviewDetail> {
+  return request(`/reviews/${reviewId}`)
+}
+
+export function getSessionFeedback(sessionId: string, versionId?: string): Promise<{comments: import('@/types').Comment[]; reviews: any[]}> {
+  const url = versionId
+    ? `/reviews/session/${sessionId}/feedback?version_id=${versionId}`
+    : `/reviews/session/${sessionId}/feedback`
+  return request(url)
+}
+
+export function addComment(reviewId: string, section: string, content: string, parentId?: string): Promise<import('@/types').Comment> {
+  return request(`/reviews/${reviewId}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ section, content, parent_id: parentId })
+  })
+}
+
+export function reviewAction(reviewId: string, action: 'approve' | 'reject' | 'request_changes', comment?: string): Promise<{message: string; status: string}> {
+  return request(`/reviews/${reviewId}/action`, {
+    method: 'PATCH',
+    body: JSON.stringify({ action, comment })
+  })
+}
+
+export function getMyCompletedReviews(): Promise<Array<{
+  id: string
+  session_id: string
+  project_name: string
+  author_name: string
+  status: string
+  reviewed_at: string | null
+}>> {
+  return request('/reviews/my-completed')
+}
+
+export interface VersionHistory {
+  version_id: string
+  version_number: number
+  project_name: string
+  created_at: string
+  reviews: Array<{
+    reviewer_id: string
+    reviewer_name: string
+    status: string
+    reviewed_at: string | null
+    submitted_at: string
+  }>
+  hld_json: string
+}
+
+export function getSessionVersions(sessionId: string): Promise<VersionHistory[]> {
+  return request(`/reviews/session/${sessionId}/versions`)
 }

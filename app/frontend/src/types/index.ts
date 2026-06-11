@@ -121,6 +121,60 @@ export interface TemplateOption {
   default_sections?: string[]
 }
 
+// ---------------------------------------------------------------------------
+// User & Authentication
+// ---------------------------------------------------------------------------
+
+export type UserRole = 'author' | 'reviewer'
+
+export type ReviewStatus = 'pending' | 'approved' | 'rejected' | 'changes_requested'
+
+export interface ReviewSummary {
+  id: string
+  session_id: string
+  author_id: string
+  author_name: string
+  reviewer_id: string
+  reviewer_name: string
+  status: ReviewStatus
+  submitted_at: string
+  reviewed_at?: string
+  project_name?: string
+}
+
+export interface Comment {
+  id: string
+  reviewer_id: string
+  reviewer_name: string
+  section: string
+  content: string
+  created_at: string
+  resolved: boolean
+  replies: Comment[]
+}
+
+export interface ReviewDetail {
+  review: ReviewSummary
+  hld_json: string
+  session_id: string
+  comments: Comment[]
+}
+
+export interface User {
+  id: string
+  email: string
+  name: string
+  role: UserRole
+  avatar_url?: string
+  created_at: string
+}
+
+export interface LoginResponse {
+  access_token: string
+  token_type: string
+  user: User
+}
+
 export const TEMPLATE_OPTIONS: TemplateOption[] = [
   {
     id: 'arc42',

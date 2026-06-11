@@ -1,0 +1,136 @@
+.container {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  background: #fafafa;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.commentList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.comment {
+  padding: var(--space-3);
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--color-primary);
+}
+
+.commentHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+
+.authorInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.author {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.reviewStatus {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.reviewStatus[data-status="approved"] {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.reviewStatus[data-status="rejected"] {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.reviewStatus[data-status="changes_requested"] {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.reviewStatus[data-status="pending"] {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.date {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.commentContent {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+}
+
+.addCommentSection {
+  margin-top: var(--space-2);
+}
+
+.addButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.addButton:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.inputBox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.textarea {
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+  transition: var(--transition-fast);
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}

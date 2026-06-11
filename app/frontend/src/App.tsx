@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import type { HLDDocument, HLDTemplate, Section } from '@/types'
+import { useAuth } from '@/contexts/AuthContext'
+import { LoginPage } from '@/features/auth'
+import { Dashboard } from '@/features/dashboard'
 import { SpecUpload } from '@/features/spec-upload/SpecUpload'
 import { CharacteristicsPage } from '@/features/characteristics'
 import { InterviewPage } from '@/features/interview/InterviewPage'
 import { FormatSelection } from '@/features/format-selection/FormatSelection'
 import { HLDOutput } from '@/features/hld-output'
+import { Spinner } from '@/components/Spinner'
 
 // ---------------------------------------------------------------------------
 // Session-level state persistence — survives F5 within the same browser tab.
@@ -18,7 +22,28 @@ function readSaved(): Record<string, unknown> {
   try { return JSON.parse(sessionStorage.getItem(SS_KEY) ?? '{}') } catch { return {} }
 }
 
+// Protected Route wrapper
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, loading } = useAuth()
+  const location = useLocation()
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <Spinner />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />
+  }
+
+  return <>{children}</>
+}
+
 export function App() {
+  const { isAuthenticated, loading } = useAuth()
   const saved = readSaved()
 
   const [specText, setSpecText]     = useState<string>((saved.specText as string) ?? '')
@@ -64,21 +89,49 @@ export function App() {
     setPreloadedHld(hld)
   }
 
+  // Show loading spinner while checking auth
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <Spinner />
+      </div>
+    )
+  }
+
   return (
     <Routes>
+      {/* Public Routes */}
+      <Route path="/login" element={!isAuthenticated ? <LoginPage /> : <Navigate to="/dashboard" replace />} />
+
+      {/* Protected Routes */}
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Step 1 — Upload */}
       <Route
         path="/"
-        element={<SpecUpload onReady={handleSpecReady} onLoadSession={handleLoadSession} />}
+        element={
+          <ProtectedRoute>
+            <SpecUpload onReady={handleSpecReady} onLoadSession={handleLoadSession} />
+          </ProtectedRoute>
+        }
       />
 
       {/* Step 2 — Characteristics Detection & Prioritization */}
       <Route
         path="/characteristics"
         element={
-          specText && sessionId
-            ? <CharacteristicsPage />
-            : <Navigate to="/" replace />
+          <ProtectedRoute>
+            {specText && sessionId
+              ? <CharacteristicsPage />
+              : <Navigate to="/" replace />}
+          </ProtectedRoute>
         }
       />
 
@@ -86,43 +139,67 @@ export function App() {
       <Route
         path="/interview"
         element={
-          specText && sessionId
-            ? <InterviewPage sessionId={sessionId} onSpecReady={handleSpecReady} />
-            : <Navigate to="/" replace />
+          <ProtectedRoute>
+            {specText && sessionId
+              ? <InterviewPage sessionId={sessionId} onSpecReady={handleSpecReady} />
+              : <Navigate to="/" replace />}
+          </ProtectedRoute>
         }
       />
 
-      {/* Step 3 — Template selection */}
+      {/* Step 4 — Template selection */}
       <Route
         path="/format"
         element={
-          specText
-            ? <FormatSelection onSelected={handleFormatSelected} />
-            : <Navigate to="/" replace />
+          <ProtectedRoute>
+            {specText
+              ? <FormatSelection onSelected={handleFormatSelected} />
+              : <Navigate to="/" replace />}
+          </ProtectedRoute>
         }
       />
 
-      {/* Step 4 — HLD output */}
+      {/* Step 5 — HLD output */}
       <Route
         path="/generate"
         element={
-          specText && template ? (
-            <HLDOutput
-              specText={specText}
-              sessionId={sessionId ?? undefined}
-              template={template}
-              customSections={customSections}
-              customTemplateText={customTemplateText}
-              preloadedHld={preloadedHld}
-              thoughtworksMode={thoughtworksMode}
-            />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          <ProtectedRoute>
+            {specText && template ? (
+              <HLDOutput
+                specText={specText}
+                sessionId={sessionId ?? undefined}
+                template={template}
+                customSections={customSections}
+                customTemplateText={customTemplateText}
+                preloadedHld={preloadedHld}
+                thoughtworksMode={thoughtworksMode}
+              />
+            ) : (
+              <Navigate to="/" replace />
+            )}
+          </ProtectedRoute>
         }
       />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* HLD Output for reviewers - no prerequisites needed */}
+      <Route
+        path="/hld-output"
+        element={
+          <ProtectedRoute>
+            <HLDOutput
+              specText=""
+              sessionId={undefined}
+              template="c4-adr"
+              customSections={undefined}
+              customTemplateText={undefined}
+              preloadedHld={null}
+              thoughtworksMode={false}
+            />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />} />
     </Routes>
   )
 }

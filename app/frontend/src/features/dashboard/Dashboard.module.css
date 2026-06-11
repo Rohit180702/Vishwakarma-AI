@@ -1,0 +1,306 @@
+/* Dashboard - User landing page */
+
+.container {
+  min-height: 100vh;
+  background: var(--color-surface-2);
+}
+
+.content {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+}
+
+/* Welcome Section */
+.welcome {
+  text-align: center;
+  margin-bottom: var(--space-10);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-primary-subtle);
+  border-radius: var(--radius-full);
+  margin-bottom: var(--space-4);
+}
+
+.roleIcon {
+  font-size: 16px;
+}
+
+.roleLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary-deep);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.title {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 var(--space-2);
+}
+
+.subtitle {
+  font-size: 16px;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+/* Actions */
+.actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-6);
+  margin-bottom: var(--space-8);
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-base);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-primary-subtle);
+}
+
+.cardTitle {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 var(--space-2);
+}
+
+.cardDesc {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-5);
+  line-height: 1.5;
+}
+
+/* Footer */
+.footer {
+  margin-top: auto;
+  padding-top: var(--space-8);
+  text-align: center;
+}
+
+/* Review list styles */
+.reviewList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.reviewItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+}
+
+.reviewItem:hover {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+}
+
+.reviewInfo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+}
+
+.projectName {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 2px;
+}
+
+.authorInfo {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.reviewDate {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.emptyState {
+  margin-top: var(--space-4);
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  font-style: italic;
+}
+
+.statusBadge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  margin-top: var(--space-1);
+}
+
+.statusBadge[data-status="approved"] {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.statusBadge[data-status="rejected"] {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.statusBadge[data-status="changes_requested"] {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.statusBadge[data-status="pending"] {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.reviewActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Version History */
+.versionHistory {
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.loading {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  text-align: center;
+  padding: var(--space-3);
+}
+
+.versionList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.versionItem {
+  padding: var(--space-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+}
+
+.versionItem:hover {
+  border-color: var(--color-primary);
+}
+
+.versionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+
+.versionNumber {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.versionDate {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.versionReviews {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.versionReview {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--color-surface);
+  border-radius: var(--radius-xs);
+}
+
+.reviewerName {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+/* Reviewer Status List - for showing multiple reviewers per session */
+.reviewerStatusList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.reviewerStatus {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--color-surface);
+  border-radius: var(--radius-xs);
+}
+
+.reviewerStatus .reviewerName {
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 80px;
+}
+
+.reviewerStatus .statusBadge {
+  margin-top: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .content {
+    padding: var(--space-6) var(--space-4);
+  }
+
+  .title {
+    font-size: 24px;
+  }
+
+  .actions {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,3 +1,7 @@
+import { useNavigate } from 'react-router-dom'
+import { Home } from 'lucide-react'
+import { UserProfile } from '@/components/UserProfile'
+import { useAuth } from '@/contexts/AuthContext'
 import styles from './AppHeader.module.css'
 
 interface AppHeaderProps {
@@ -5,6 +9,9 @@ interface AppHeaderProps {
 }
 
 export function AppHeader({ right }: AppHeaderProps) {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+
   return (
     <header className={styles.header}>
       <div className={styles.logo}>
@@ -21,7 +28,20 @@ export function AppHeader({ right }: AppHeaderProps) {
         </div>
         <span className={styles.logoName}>Vishwakarma AI</span>
       </div>
-      {right && <div className={styles.right}>{right}</div>}
+      <div className={styles.right}>
+        {user && (
+          <button
+            className={styles.dashboardBtn}
+            onClick={() => navigate('/dashboard')}
+            title="Go to Dashboard"
+          >
+            <Home size={18} />
+            <span>Dashboard</span>
+          </button>
+        )}
+        {right}
+        <UserProfile />
+      </div>
     </header>
   )
 }

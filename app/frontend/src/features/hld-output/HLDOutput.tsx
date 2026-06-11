@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { jsonrepair } from 'jsonrepair'
-import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, FileText, GitBranch, BookMarked, Download, Check, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { ChevronLeft, FileText, GitBranch, BookMarked, Download, Check, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Send } from 'lucide-react'
 import { Button } from '@/components/Button'
+import { Spinner } from '@/components/Spinner'
 import { AlertTriangle } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
-import { streamHLD, saveSession, ApiError } from '@/api/client'
+import { streamHLD, saveSession, getSessionReviewStatus, getReview, getSessionFeedback, getSessionVersions, ApiError } from '@/api/client'
 import { useToast } from '@/components/Toast/ToastContext'
+import { useAuth } from '@/contexts/AuthContext'
 import type { HLDDocument, HLDEditCommand, HLDTemplate, Section } from '@/types'
 import { TEMPLATE_OPTIONS } from '@/types'
 import { ChatPanel } from './ChatPanel'
+import { ReviewCommunicationPanel } from './ReviewCommunicationPanel'
 import { DocumentPanel } from './DocumentPanel'
 import { DiagramPanel } from './DiagramPanel'
 import { ADRPanel } from './ADRPanel'
+import { SubmitForReviewModal } from './SubmitForReviewModal'
+import { ReviewActions } from './ReviewActions'
 import styles from './HLDOutput.module.css'
 
 interface HLDOutputProps {
@@ -29,11 +34,15 @@ type Tab = 'document' | 'diagram' | 'adrs'
 type GenState = 'idle' | 'generating' | 'done' | 'error'
 
 export function HLDOutput({ specText, sessionId, template, customSections, customTemplateText, preloadedHld, thoughtworksMode = false }: HLDOutputProps) {
-  const [genState, setGenState] = useState<GenState>(preloadedHld ? 'done' : 'idle')
+  const [searchParams] = useSearchParams()
+  const reviewId = searchParams.get('review')
+  const isReviewMode = !!reviewId
+
+  const [genState, setGenState] = useState<GenState>(preloadedHld ? 'done' : (isReviewMode ? 'idle' : 'idle'))
   const [rawTokens, setRawTokens] = useState('')
   const [hld, setHld] = useState<HLDDocument | null>(preloadedHld ?? null)
   const [errorMsg, setErrorMsg] = useState('')
-  const tabKey = `vk_tab_${sessionId ?? 'default'}`
+  const tabKey = `vk_tab_${sessionId ?? reviewId ?? 'default'}`
   const [activeTab, setActiveTab] = useState<Tab>(
     () => (sessionStorage.getItem(tabKey) as Tab) ?? 'document'
   )
@@ -41,7 +50,76 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
   const [editedSectionKey, setEditedSectionKey] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [chatOpen, setChatOpen] = useState(() => window.innerWidth > 1100)
+  const [inboxOpen, setInboxOpen] = useState(false) // Start collapsed
+  const [showSubmitModal, setShowSubmitModal] = useState(false)
+  const [reviewStatus, setReviewStatus] = useState<any>(null)
+  const [actualSessionId, setActualSessionId] = useState<string | undefined>(sessionId)
+  const [comments, setComments] = useState<import('@/types').Comment[]>([])
+  const [currentReviewData, setCurrentReviewData] = useState<any>(null)
+  const [versionNumber, setVersionNumber] = useState<number | null>(null)
+  const [versionId, setVersionId] = useState<string | null>(null)
   const { showToast } = useToast()
+  const { user } = useAuth()
+  const pendingSaveRef = useRef<boolean>(false)
+
+  // Load HLD from review if in review mode
+  useEffect(() => {
+    if (reviewId && !preloadedHld) {
+      console.log('Loading review:', reviewId)
+      setGenState('generating')
+      setErrorMsg('')
+
+      getReview(reviewId)
+        .then((data) => {
+          console.log('Review data received:', data)
+          try {
+            const hldDoc: HLDDocument = JSON.parse(data.hld_json)
+            console.log('HLD parsed successfully:', hldDoc.project_name)
+            setHld(hldDoc)
+            setActualSessionId(data.session_id)
+            setComments(data.comments || [])
+            setCurrentReviewData(data.review) // Store the review details including status
+
+            // Get version_id from review to filter feedback
+            if (data.review?.version_id) {
+              setVersionId(data.review.version_id)
+            }
+
+            setGenState('done')
+            showToast('HLD loaded successfully', 'success')
+          } catch (e) {
+            console.error('Failed to parse HLD JSON:', e)
+            console.error('Raw HLD JSON:', data.hld_json)
+            setErrorMsg('Failed to parse HLD data')
+            setGenState('error')
+            showToast('Failed to parse HLD data', 'error')
+          }
+        })
+        .catch((error: any) => {
+          console.error('Failed to fetch review:', error)
+          setErrorMsg(error.message || 'Failed to load review')
+          setGenState('error')
+          showToast(error.message || 'Failed to load review', 'error')
+        })
+    }
+  }, [reviewId, preloadedHld, showToast])
+
+  // Load feedback for authors (when not in review mode but have sessionId)
+  useEffect(() => {
+    const effectiveSessionId = actualSessionId || sessionId
+    if (!reviewId && effectiveSessionId && hld && user?.role === 'author') {
+      console.log('Loading feedback for author:', effectiveSessionId)
+      getSessionFeedback(effectiveSessionId)
+        .then((data) => {
+          console.log('Feedback received:', data)
+          setComments(data.comments || [])
+        })
+        .catch((error: any) => {
+          console.error('Failed to load feedback:', error)
+          // Don't show error toast, feedback is optional
+        })
+    }
+  }, [reviewId, actualSessionId, sessionId, hld, user])
 
   // Keep sidebar state in sync with viewport resize
   useEffect(() => {
@@ -50,12 +128,44 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
   }, [])
+
+  // Poll review status every 10 seconds and fetch version number
+  useEffect(() => {
+    const effectiveSessionId = actualSessionId || sessionId
+    if (!effectiveSessionId) return
+
+    const fetchStatus = async () => {
+      try {
+        const status = await getSessionReviewStatus(effectiveSessionId)
+        setReviewStatus(status)
+
+        // Fetch version information
+        const versions = await getSessionVersions(effectiveSessionId)
+        if (versions.length > 0) {
+          // Get the latest version
+          const latestVersion = versions[0] // Already sorted by version_number desc
+          setVersionNumber(latestVersion.version_number)
+
+          // Set versionId for authors viewing their own HLD (critical for version isolation)
+          if (!reviewId && user?.role === 'author') {
+            setVersionId(latestVersion.version_id)
+          }
+        }
+      } catch (error) {
+        // Silently fail - status is optional
+      }
+    }
+
+    fetchStatus()
+    const interval = setInterval(fetchStatus, 10000) // Poll every 10s
+    return () => clearInterval(interval)
+  }, [actualSessionId, sessionId, reviewId, user])
   const abortRef = useRef<AbortController | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const navigate = useNavigate()
 
   const generate = useCallback(async () => {
-    if (!specText || !template || preloadedHld) return
+    if (!specText || !template || preloadedHld || isReviewMode) return
     setGenState('generating')
     setRawTokens('')
     abortRef.current = new AbortController()
@@ -164,6 +274,7 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
     }
     setHld(updated)
     setSaveStatus('idle')
+    pendingSaveRef.current = true
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(async () => {
@@ -171,11 +282,44 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
       try {
         await saveSession(updated.project_name, template, specText, JSON.stringify(updated), sessionId)
         setSaveStatus('saved')
+        pendingSaveRef.current = false
         setTimeout(() => setSaveStatus('idle'), 2000)
       } catch {
         setSaveStatus('idle')
+        pendingSaveRef.current = false
       }
     }, 1500)
+  }
+
+  // Function to ensure all pending saves are completed before submission
+  const ensureSaved = async (): Promise<void> => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+
+    if (pendingSaveRef.current && hld) {
+      setSaveStatus('saving')
+      try {
+        await saveSession(hld.project_name, template, specText, JSON.stringify(hld), sessionId)
+        setSaveStatus('saved')
+        pendingSaveRef.current = false
+        setTimeout(() => setSaveStatus('idle'), 1000)
+      } catch (error) {
+        setSaveStatus('idle')
+        pendingSaveRef.current = false
+        throw error
+      }
+    }
+  }
+
+  const handleSubmitClick = async () => {
+    try {
+      await ensureSaved()
+      setShowSubmitModal(true)
+    } catch (error) {
+      showToast('Failed to save changes before submission', 'error')
+    }
   }
 
   const handleChatEdit = useCallback((cmd: HLDEditCommand) => {
@@ -214,6 +358,18 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
   }, [])
 
   if (genState === 'generating') {
+    // If in review mode, show a simple loading screen instead of GeneratingPanel
+    if (isReviewMode) {
+      return (
+        <div className={styles.errorPage}>
+          <div className={styles.loading}>
+            <Spinner />
+            <p>Loading HLD for review...</p>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <GeneratingPanel
         template={template}
@@ -240,11 +396,22 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
 
   if (!hld) return null
 
+  // Check if we should show Review Inbox
+  const effectiveSessionId = actualSessionId || sessionId
+  // Show inbox if: (1) in review mode, (2) has reviews, OR (3) is author with a session (to see feedback)
+  const showReviewInbox = isReviewMode || reviewStatus?.has_reviews || (user?.role === 'author' && effectiveSessionId)
+
   return (
     <div className={styles.shell}>
-      {/* Left — chat (collapsible) */}
+      {/* LEFT — AI Chat (collapsible) */}
       <aside className={`${styles.chatCol} ${!chatOpen ? styles.chatColCollapsed : ''}`} aria-label="Architecture sidekick">
-        {chatOpen && <ChatPanel hld={hld} sessionId={sessionId} onEdit={handleChatEdit} />}
+        {chatOpen && (
+          <ChatPanel
+            hld={hld}
+            sessionId={actualSessionId}
+            onEdit={user?.role === 'reviewer' || isReviewMode ? undefined : handleChatEdit}
+          />
+        )}
       </aside>
 
       {/* Main — tabs + content */}
@@ -260,11 +427,15 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
             >
               {chatOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
             </button>
-            <button className={styles.backBtn} onClick={() => navigate('/format')}>
+            <button className={styles.backBtn} onClick={() => navigate(isReviewMode ? '/dashboard' : '/format')}>
               <ChevronLeft size={14} /> <span className={styles.backLabel}>Vishwakarma</span>
               <span className={styles.backSep}>/</span>
-              <span className={styles.backCurrent}>{hld.project_name}</span>
+              <span className={styles.backCurrent}>
+                {hld.project_name}
+                {versionNumber && ` (v${versionNumber})`}
+              </span>
             </button>
+
           </div>
 
           {/* Center: pill tab group */}
@@ -274,7 +445,7 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
             <TabButton id="tab-adrs" active={activeTab === 'adrs'} icon={<BookMarked size={13} />} label={`ADRs${hld ? ` (${hld.adrs.length})` : ''}`} onClick={() => setTab('adrs')} />
           </nav>
 
-          {/* Right: save indicator + export */}
+          {/* Right: save indicator + export + submit + inbox toggle */}
           <span className={styles.headerRight}>
             {saveStatus === 'saving' && (
               <span className={styles.saveStatus}>Saving…</span>
@@ -284,9 +455,28 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
                 <Check size={11} /> Saved
               </span>
             )}
+            {user?.role === 'author' && !isReviewMode && (
+              <button
+                className={styles.submitBtn}
+                onClick={handleSubmitClick}
+                title="Submit for Review"
+              >
+                <Send size={13} /> Submit for Review
+              </button>
+            )}
             <button className={styles.exportBtn} onClick={handleExport} title="Export as Markdown">
               <Download size={13} /> Export
             </button>
+            {showReviewInbox && (
+              <button
+                className={styles.sidebarToggle}
+                onClick={() => setInboxOpen(o => !o)}
+                title={inboxOpen ? 'Hide review inbox' : 'Show review inbox'}
+                aria-label={inboxOpen ? 'Hide review inbox' : 'Show review inbox'}
+              >
+                {inboxOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
+              </button>
+            )}
           </span>
         </header>
 
@@ -301,7 +491,21 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
         >
           {activeTab === 'document' ? (
             <div className={styles.docScroll}>
-              <DocumentPanel hld={hld} onSectionEdit={handleSectionEdit} scrollToKey={editedSectionKey} onScrolled={() => setEditedSectionKey(null)} />
+              <DocumentPanel
+                hld={hld}
+                onSectionEdit={user?.role === 'reviewer' || isReviewMode ? undefined : handleSectionEdit}
+                scrollToKey={editedSectionKey}
+                onScrolled={() => setEditedSectionKey(null)}
+                reviewId={reviewId}
+                comments={comments}
+                canComment={isReviewMode}
+                onCommentsChange={() => {
+                  // Reload review to get updated comments
+                  if (reviewId) {
+                    getReview(reviewId).then(data => setComments(data.comments || []))
+                  }
+                }}
+              />
             </div>
           ) : activeTab === 'diagram' ? (
             <div className={styles.diagramWrap}>
@@ -309,11 +513,64 @@ export function HLDOutput({ specText, sessionId, template, customSections, custo
             </div>
           ) : (
             <div className={styles.docScroll}>
-              <ADRPanel hld={hld} />
+              <ADRPanel
+                hld={hld}
+                reviewId={reviewId}
+                comments={comments}
+                canComment={isReviewMode}
+                onCommentsChange={() => {
+                  // Reload review to get updated comments
+                  if (reviewId) {
+                    getReview(reviewId).then(data => setComments(data.comments || []))
+                  }
+                }}
+              />
             </div>
           )}
         </div>
       </div>
+
+      {/* RIGHT — Review Inbox (collapsible, only when reviews exist) */}
+      {showReviewInbox && effectiveSessionId && (
+        <aside className={`${styles.inboxCol} ${!inboxOpen ? styles.inboxColCollapsed : ''}`} aria-label="Review inbox">
+          {inboxOpen && (
+            <ReviewCommunicationPanel
+              sessionId={effectiveSessionId}
+              versionId={versionId}
+              reviewId={reviewId}
+              onNewComment={() => {
+                // Reload feedback after new comment
+                if (reviewId) {
+                  getReview(reviewId).then(data => setComments(data.comments || []))
+                }
+              }}
+            />
+          )}
+        </aside>
+      )}
+
+      {/* Submit for Review Modal */}
+      {showSubmitModal && (
+        <SubmitForReviewModal
+          hld={hld}
+          sessionId={sessionId}
+          onClose={() => setShowSubmitModal(false)}
+          onSuccess={() => {
+            // Modal will show success toast
+          }}
+        />
+      )}
+
+      {/* Review Actions - only for reviewers in review mode with pending status */}
+      {isReviewMode && user?.role === 'reviewer' && reviewId && currentReviewData?.status === 'pending' && (
+        <ReviewActions
+          reviewId={reviewId}
+          onSuccess={() => {
+            showToast('Review submitted successfully', 'success')
+            navigate('/dashboard')
+          }}
+        />
+      )}
     </div>
   )
 }

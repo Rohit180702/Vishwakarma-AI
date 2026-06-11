@@ -46,6 +46,38 @@ class MessageRole(str, Enum):
     ASSISTANT = "assistant"
 
 
+class UserRole(str, Enum):
+    AUTHOR = "author"
+    REVIEWER = "reviewer"
+
+
+class ReviewStatus(str, Enum):
+    DRAFT = "draft"
+    PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    CHANGES_REQUESTED = "changes_requested"
+
+
+class ReviewerStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    CHANGES_REQUESTED = "changes_requested"
+
+
+class ReviewScope(str, Enum):
+    FULL = "full"
+    SECTIONS = "sections"
+    ADRS = "adrs"
+
+
+class CommentTargetType(str, Enum):
+    SECTION = "section"
+    ADR = "adr"
+    GENERAL = "general"
+
+
 # ---------------------------------------------------------------------------
 # HLD quality guardrail report
 # ---------------------------------------------------------------------------
@@ -159,3 +191,72 @@ class ChatContext:
     """Everything the chat agent needs to give grounded answers."""
     hld: HLDDocument
     history: list[ChatMessage] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# User & Authentication
+# ---------------------------------------------------------------------------
+
+@dataclass
+class User:
+    id: str
+    email: str
+    name: str
+    role: UserRole
+    password_hash: str = ""  # Never sent to frontend
+    avatar_url: Optional[str] = None
+    created_at: Optional[str] = None  # ISO timestamp
+
+
+# ---------------------------------------------------------------------------
+# Review & Version Management
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ReviewerAssignment:
+    user_id: str
+    scope: ReviewScope
+    target_ids: list[str] = field(default_factory=list)  # section keys or ADR ids
+    status: ReviewerStatus = ReviewerStatus.PENDING
+    reviewed_at: Optional[str] = None  # ISO timestamp
+
+
+@dataclass
+class HLDVersion:
+    id: str
+    session_id: str
+    version_number: int
+    hld_document: HLDDocument
+    author_id: str
+    created_at: str  # ISO timestamp
+    status: ReviewStatus = ReviewStatus.DRAFT
+    parent_version_id: Optional[str] = None
+
+
+@dataclass
+class ReviewRequest:
+    id: str
+    version_id: str
+    author_id: str
+    reviewers: list[ReviewerAssignment]
+    overall_status: ReviewStatus
+    submitted_at: str  # ISO timestamp
+    resolved_at: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Comments
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Comment:
+    id: str
+    review_request_id: str
+    version_id: str
+    author_id: str
+    target_type: CommentTargetType
+    target_id: Optional[str] = None  # section_key or adr_id
+    parent_comment_id: Optional[str] = None  # For threaded replies
+    text: str = ""
+    resolved: bool = False
+    created_at: str = ""  # ISO timestamp

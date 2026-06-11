@@ -242,12 +242,12 @@
 }
 
 .continueBtn {
-  background: var(--primary-600);
+  background: var(--color-primary);
   color: white;
 }
 
 .continueBtn:hover:not(:disabled) {
-  background: var(--primary-700);
+  background: var(--color-primary-hover);
 }
 
 .continueBtn:disabled {

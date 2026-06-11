@@ -1,12 +1,17 @@
 import { Download } from 'lucide-react'
-import type { ADR, HLDDocument } from '@/types'
+import type { ADR, HLDDocument, Comment } from '@/types'
+import { CommentSection } from './CommentSection'
 import styles from './ADRPanel.module.css'
 
 interface ADRPanelProps {
   hld: HLDDocument
+  reviewId?: string | null
+  comments?: Comment[]
+  canComment?: boolean
+  onCommentsChange?: () => void
 }
 
-export function ADRPanel({ hld }: ADRPanelProps) {
+export function ADRPanel({ hld, reviewId, comments = [], canComment = false, onCommentsChange }: ADRPanelProps) {
   const { adrs, project_name } = hld
 
   const downloadMarkdown = () => {
@@ -112,14 +117,33 @@ export function ADRPanel({ hld }: ADRPanelProps) {
       {/* 2-column card grid */}
       <div className={styles.adrGrid}>
         {adrs.map(adr => (
-          <ADRCard key={adr.id} adr={adr} />
+          <ADRCard
+            key={adr.id}
+            adr={adr}
+            reviewId={reviewId}
+            comments={comments}
+            canComment={canComment}
+            onCommentsChange={onCommentsChange}
+          />
         ))}
       </div>
     </div>
   )
 }
 
-function ADRCard({ adr }: { adr: ADR }) {
+function ADRCard({
+  adr,
+  reviewId,
+  comments = [],
+  canComment = false,
+  onCommentsChange
+}: {
+  adr: ADR
+  reviewId?: string | null
+  comments?: Comment[]
+  canComment?: boolean
+  onCommentsChange?: () => void
+}) {
   const statusClass: Record<string, string> = {
     Accepted:   styles.adrBadgeAccepted,
     Proposed:   styles.adrBadgeProposed,
@@ -181,6 +205,17 @@ function ADRCard({ adr }: { adr: ADR }) {
           <span className={styles.costBand}>{adr.cost_band}</span>
         </div>
       </div>
+
+      {/* Comment section for reviewers */}
+      {reviewId && (
+        <CommentSection
+          reviewId={reviewId}
+          sectionKey={`adr-${adr.id}`}
+          comments={comments}
+          canComment={canComment}
+          onCommentAdded={() => onCommentsChange?.()}
+        />
+      )}
     </div>
   )
 }
