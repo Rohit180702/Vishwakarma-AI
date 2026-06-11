@@ -200,7 +200,7 @@ class AnthropicLLM(LLMPort):
         chunks: list[str] = []
         async with self._client.messages.stream(
             model=MODEL,
-            max_tokens=32000,
+            max_tokens=64000,
             system=system,
             messages=[
                 {"role": "user", "content": _render_hld_user(spec_text, correction_hint)},
@@ -224,7 +224,7 @@ class AnthropicLLM(LLMPort):
         async def _stream() -> AsyncIterator[str]:
             async with self._client.messages.stream(
                 model=MODEL,
-                max_tokens=32000,
+                max_tokens=64000,
                 system=system,
                 messages=[
                     {"role": "user", "content": _render_hld_user(spec_text)},

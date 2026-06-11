@@ -1265,10 +1265,11 @@ const LEVEL_TOOLTIPS: Record<DiagramLevel, string> = {
 const DRILL_ORDER: DiagramLevel[] = ['context', 'container', 'component']
 
 export function DiagramPanel({ diagrams }: { diagrams: C4Diagram[] }) {
-  const levels = useMemo(() => diagrams.map(d => d.level), [diagrams])
+  // Sequence diagrams are rendered inline within document sections; exclude
+  // them from the dedicated Diagram tab which is reserved for C4 architecture views.
+  const visibleDiagrams = useMemo(() => diagrams.filter(d => d.level !== 'sequence'), [diagrams])
+  const levels = useMemo(() => visibleDiagrams.map(d => d.level), [visibleDiagrams])
   const [active, setActive] = useState<DiagramLevel>(levels[0] ?? 'context')
-  const activeDiagram = diagrams.find(d => d.level === active)
-
   // Next level down (if it exists) — enables double-click drill-down
   const drillLevel = useMemo(() => {
     const i = DRILL_ORDER.indexOf(active)
@@ -1277,9 +1278,11 @@ export function DiagramPanel({ diagrams }: { diagrams: C4Diagram[] }) {
     return levels.includes(next) ? next : null
   }, [active, levels])
 
-  if (diagrams.length === 0) {
-    return <div className={styles.empty}><p>No diagram data available.</p></div>
+  if (visibleDiagrams.length === 0) {
+    return <div className={styles.empty}><p>No architecture diagrams available.</p></div>
   }
+
+  const activeDiagram = visibleDiagrams.find(d => d.level === active)
 
   return (
     <div className={styles.panel}>
@@ -1309,8 +1312,8 @@ export function DiagramPanel({ diagrams }: { diagrams: C4Diagram[] }) {
             onDrillDown={drillLevel ? () => setActive(drillLevel) : undefined}
           />
         )
-        : <div className={styles.empty}><p>No diagram for this level.</p></div>
-      }
+        : <div className={styles.empty}><p>No diagram for this level.</p></div>}
+    
     </div>
   )
 }

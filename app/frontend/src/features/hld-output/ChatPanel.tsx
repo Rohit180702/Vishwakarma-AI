@@ -134,20 +134,6 @@ export function ChatPanel({ hld, sessionId, onEdit }: ChatPanelProps) {
 
   return (
     <div className={styles.panel}>
-      {/* Project context box — matches design's ctx-aside */}
-      <div className={styles.ctxBox}>
-        <p className={styles.ctxLabel}>Project Context</p>
-        <div className={styles.ctxProject}>
-          <p className={styles.ctxProjectLabel}>Architecture Document</p>
-          <p className={styles.ctxProjectName}>{hld.project_name}</p>
-        </div>
-      </div>
-
-      <div className={styles.header}>
-        <Sparkles size={15} className={styles.headerIcon} />
-        <span className={styles.headerTitle}>Architecture Assistant</span>
-      </div>
-
       <div className={styles.messages} aria-live="polite" aria-label="Chat messages">
         {messages.map((msg, i) => (
           <ChatBubble key={i} message={msg} />

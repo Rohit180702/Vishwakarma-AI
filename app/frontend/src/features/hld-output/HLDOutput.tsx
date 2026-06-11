@@ -3,13 +3,12 @@ import { jsonrepair } from 'jsonrepair'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertTriangle, ArrowLeft, BookMarked, Check, ChevronLeft, Download,
-  FileText, GitBranch, MessageSquare, PanelLeftClose, PanelLeftOpen,
-  PanelRightClose, PanelRightOpen, Send,
+  FileText, GitBranch, MessageSquare, PanelRightClose, PanelRightOpen, Send,
 } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Spinner } from '@/components/Spinner'
 import { AppHeader } from '@/components/AppHeader'
-import { streamHLD, saveSession, getSessionReviewStatus, getReview, getSessionFeedback, getSessionVersions, ApiError } from '@/api/client'
+import { streamHLD, saveSession, loadSession, getSessionReviewStatus, getReview, getSessionFeedback, getSessionVersions, ApiError } from '@/api/client'
 import { useToast } from '@/components/Toast/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
 import type { HLDDocument, HLDEditCommand, HLDTemplate, Section } from '@/types'
@@ -23,6 +22,7 @@ import { SubmitForReviewModal } from './SubmitForReviewModal'
 import { ReviewActions } from './ReviewActions'
 import styles from './HLDOutput.module.css'
 
+
 interface HLDOutputProps {
   specText: string
   sessionId?: string
@@ -30,14 +30,15 @@ interface HLDOutputProps {
   customSections?: Section[]
   customTemplateText?: string
   preloadedHld?: HLDDocument | null
+  onGenerated?: (hld: HLDDocument) => void
 }
 
 type View = 'document' | 'diagram' | 'adrs'
-type GenState = 'idle' | 'generating' | 'done' | 'error'
+type GenState = 'idle' | 'checking' | 'generating' | 'done' | 'error'
 
 export function HLDOutput({
   specText, sessionId, template, customSections,
-  customTemplateText, preloadedHld,
+  customTemplateText, preloadedHld, onGenerated,
 }: HLDOutputProps) {
   const [searchParams] = useSearchParams()
   const reviewId = searchParams.get('review')
@@ -55,8 +56,9 @@ export function HLDOutput({
   const setView = (v: View) => { setActiveView(v); sessionStorage.setItem(viewKey, v) }
 
   const [scrollToKey, setScrollToKey] = useState<string | null>(null)
+  const [activeSectionKey, setActiveSectionKey] = useState<string | null>(null)
   const [saveStatus, setSaveStatus]   = useState<'idle' | 'saving' | 'saved'>('idle')
-  const [chatMode, setChatMode]       = useState(false)
+  const [chatMode, setChatMode]       = useState(true)
   const [inboxOpen, setInboxOpen]     = useState(false)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
   const [reviewStatus, setReviewStatus]       = useState<any>(null)
@@ -68,9 +70,10 @@ export function HLDOutput({
 
   const { showToast } = useToast()
   const { user }      = useAuth()
-  const abortRef      = useRef<AbortController | null>(null)
-  const saveTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const navigate      = useNavigate()
+  const abortRef        = useRef<AbortController | null>(null)
+  const generatingRef   = useRef(false)
+  const saveTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const navigate        = useNavigate()
 
   // Load HLD from review if in review mode
   useEffect(() => {
@@ -135,63 +138,115 @@ export function HLDOutput({
     return () => clearInterval(interval)
   }, [actualSessionId, sessionId, reviewId, user])
 
-
-  const generate = useCallback(async () => {
-    if (!specText || !template || preloadedHld || isReviewMode) return
+  // ---------------------------------------------------------------------------
+  // Generation — with DB-first restore to prevent redundant regeneration
+  // ---------------------------------------------------------------------------
+  const runGeneration = useCallback(async (signal: AbortSignal) => {
     setGenState('generating')
     setRawTokens('')
-    abortRef.current = new AbortController()
 
     let accumulated = ''
     let lastRenderMs = 0
 
-    try {
-      await streamHLD(
-        specText,
-        template,
-        (token) => {
-          accumulated += token
-          const now = Date.now()
-          if (now - lastRenderMs >= 100) {
-            lastRenderMs = now
-            setRawTokens(accumulated)
-          }
-        },
-        (cleanedJson) => {
+    await streamHLD(
+      specText,
+      template!,
+      (token) => {
+        accumulated += token
+        const now = Date.now()
+        if (now - lastRenderMs >= 100) {
+          lastRenderMs = now
           setRawTokens(accumulated)
-          try {
-            const jsonToParse = cleanedJson || extractJson(accumulated)
-            const doc: HLDDocument = JSON.parse(jsonToParse)
-            setHld(doc)
-            setGenState('done')
-            saveSession(doc.project_name, template, specText, jsonToParse, sessionId).catch(
-              (e) => console.warn('Session save failed (non-critical):', e)
-            )
-          } catch (e) {
-            console.error('Parse failed:', e)
-            const msg = 'Generated output was malformed. Please try again.'
-            setErrorMsg(msg)
-            setGenState('error')
-            showToast(msg, 'error')
-          }
-        },
-        abortRef.current.signal,
-        customSections?.map(s => s.name),
-        customTemplateText,
-      )
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return
-      const msg = err instanceof ApiError ? err.detail : 'Generation failed'
-      setErrorMsg(msg)
-      setGenState('error')
-      showToast(msg, 'error')
-    }
-  }, [specText, template, customSections, customTemplateText])
+        }
+      },
+      (cleanedJson) => {
+        setRawTokens(accumulated)
+        try {
+          const jsonToParse = cleanedJson || extractJson(accumulated)
+          const doc: HLDDocument = JSON.parse(jsonToParse)
+          setHld(doc)
+          setGenState('done')
+          generatingRef.current = false
+          onGenerated?.(doc)
+          saveSession(doc.project_name, template!, specText, jsonToParse, sessionId).catch(
+            (e) => console.warn('Session save failed (non-critical):', e)
+          )
+        } catch (e) {
+          console.error('Parse failed:', e)
+          const msg = 'Generated output was malformed. Please try again.'
+          setErrorMsg(msg)
+          setGenState('error')
+          generatingRef.current = false
+          showToast(msg, 'error')
+        }
+      },
+      signal,
+      customSections?.map(s => s.name),
+      customTemplateText,
+    )
+  }, [specText, template, customSections, customTemplateText, sessionId])
 
   useEffect(() => {
-    generate()
-    return () => { abortRef.current?.abort() }
-  }, [generate])
+    if (!specText || !template) return
+    if (generatingRef.current) return
+
+    // Short-circuit: already have an in-memory preloaded HLD (passed via prop)
+    if (preloadedHld) return
+
+    generatingRef.current = true
+    const abort = new AbortController()
+    abortRef.current = abort
+
+    const startFlow = async () => {
+      // ── Step 1: try to restore from the backend DB ─────────────────────────
+      // The HLD JSON is too large for sessionStorage — this is the source of
+      // truth. If a completed HLD already exists for this session, skip regen.
+      if (sessionId) {
+        try {
+          setGenState('checking')
+          const detail = await loadSession(sessionId)
+          if (abort.signal.aborted) { generatingRef.current = false; return }
+          if (detail.hld_json && detail.hld_json.trim().startsWith('{')) {
+            const doc: HLDDocument = JSON.parse(jsonrepair(detail.hld_json))
+            if (doc.sections?.length > 0) {
+              setHld(doc)
+              setGenState('done')
+              generatingRef.current = false
+              onGenerated?.(doc)
+              return
+            }
+          }
+        } catch {
+          // Session not found or hld_json empty — fall through to generation
+        }
+      }
+
+      if (abort.signal.aborted) { generatingRef.current = false; return }
+
+      // ── Step 2: no cached HLD found — generate fresh ────────────────────────
+      try {
+        await runGeneration(abort.signal)
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          generatingRef.current = false
+          return
+        }
+        const msg = err instanceof ApiError ? err.detail : 'Generation failed'
+        setErrorMsg(msg)
+        setGenState('error')
+        generatingRef.current = false
+        showToast(msg, 'error')
+      }
+    }
+
+    startFlow()
+
+    return () => {
+      abort.abort()
+      generatingRef.current = false
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [specText, template, customSections, customTemplateText, sessionId])
 
   // ---------------------------------------------------------------------------
   // Export
@@ -332,6 +387,15 @@ export function HLDOutput({
   // ---------------------------------------------------------------------------
   // Loading / error states
   // ---------------------------------------------------------------------------
+  if (genState === 'checking') {
+    return (
+      <div className={styles.checkingPage}>
+        <div className={styles.checkingSpinner} />
+        <p className={styles.checkingLabel}>Restoring your document…</p>
+      </div>
+    )
+  }
+
   if (genState === 'generating') {
     // If in review mode, show a simple loading screen instead of GeneratingPanel
     if (isReviewMode) {
@@ -396,7 +460,7 @@ export function HLDOutput({
           <TabButton id="tab-adrs" active={activeView === 'adrs'} icon={<BookMarked size={13} />} label={`ADRs${hld.adrs.length > 0 ? ` (${hld.adrs.length})` : ''}`} onClick={() => setView('adrs')} />
         </nav>
 
-        {/* Right: save indicator + export + submit + inbox toggle */}
+        {/* Right: save indicator + chat + submit + export + inbox toggle */}
         <div className={styles.topBarActions}>
           {saveStatus === 'saving' && (
             <span className={styles.saveStatus}>Saving…</span>
@@ -406,6 +470,14 @@ export function HLDOutput({
               <Check size={11} /> Saved
             </span>
           )}
+          <button
+            className={`${styles.chatToggleBtn} ${chatMode ? styles.chatToggleBtnActive : ''}`}
+            onClick={() => setChatMode(v => !v)}
+            title="Chat with AI"
+          >
+            <MessageSquare size={13} />
+            <span>Chat with AI</span>
+          </button>
           {user?.role === 'author' && !isReviewMode && (
             <button
               className={styles.submitBtn}
@@ -431,48 +503,36 @@ export function HLDOutput({
         </div>
       </header>
 
-      {/* ── Body: nav panel + content ── */}
+      {/* ── Body: left nav + content + right chat drawer ── */}
       <div className={styles.body}>
 
-        {/* Left nav panel */}
-        <aside className={styles.navPanel} aria-label={chatMode ? 'Chat' : 'Navigation'}>
-          {chatMode ? (
-            /* ── Chat mode ── */
-            <>
-              <div className={styles.chatNavHeader}>
-                <button className={styles.chatNavBack} onClick={() => setChatMode(false)}>
-                  <ArrowLeft size={12} /> Back
+        {/* ── Left: section nav — only on Document tab ── */}
+        {activeView === 'document' && (
+          <aside className={styles.navPanel} aria-label="Section navigation">
+            <div className={styles.navProject}>
+              <span className={styles.navTemplateBadge}>{hld.template}</span>
+              <h1 className={styles.navProjectName}>{hld.project_name}</h1>
+              <p className={styles.navProjectMeta}>
+                {hld.sections.length} sections · {hld.adrs.length} ADRs
+              </p>
+            </div>
+            <nav className={styles.navSectionList} aria-label="Sections">
+              {hld.sections.map(s => (
+                <button
+                  key={s.key}
+                  className={`${styles.navSectionItem} ${activeSectionKey === s.key ? styles.navSectionItemActive : ''}`}
+                  onClick={() => setScrollToKey(s.key)}
+                >
+                  <span className={styles.navSectionNum}>{s.number}</span>
+                  <span className={styles.navSectionTitle}>{s.title}</span>
                 </button>
-              </div>
-              <div className={styles.chatPanelWrap}>
-                <ChatPanel hld={hld} sessionId={sessionId} onEdit={handleChatEdit} />
-              </div>
-            </>
-          ) : (
-            /* ── Nav mode ── */
-            <>
-              {/* Project info */}
-              <div className={styles.navProject}>
-                <span className={styles.navTemplateBadge}>{hld.template}</span>
-                <h1 className={styles.navProjectName}>{hld.project_name}</h1>
-                <p className={styles.navProjectMeta}>
-                  {hld.sections.length} sections · {hld.adrs.length} ADRs
-                </p>
-              </div>
+              ))}
+            </nav>
+          </aside>
+        )}
 
-              {/* Chat toggle */}
-              <div className={styles.navBottom}>
-                <button className={styles.chatOpenBtn} onClick={() => setChatMode(true)}>
-                  <MessageSquare size={13} />
-                  <span>Chat with AI</span>
-                </button>
-              </div>
-            </>
-          )}
-        </aside>
-
-        {/* Content area */}
-        <main className={styles.content}>
+        {/* ── Centre: document / diagram / adrs ── */}
+        <main className={`${styles.content} ${chatMode ? styles.contentWithChat : ''}`}>
           {activeView === 'document' && (
             <div className={styles.docScroll}>
               <DocumentPanel
@@ -488,6 +548,7 @@ export function HLDOutput({
                     getReview(reviewId).then(data => setComments(data.comments || []))
                   }
                 }}
+                onActiveSectionChange={setActiveSectionKey}
               />
             </div>
           )}
@@ -497,14 +558,13 @@ export function HLDOutput({
             </div>
           )}
           {activeView === 'adrs' && (
-            <div className={styles.docScroll}>
+            <div className={styles.adrWrap}>
               <ADRPanel
                 hld={hld}
                 reviewId={reviewId}
                 comments={comments}
                 canComment={isReviewMode}
                 onCommentsChange={() => {
-                  // Reload review to get updated comments
                   if (reviewId) {
                     getReview(reviewId).then(data => setComments(data.comments || []))
                   }
@@ -513,6 +573,23 @@ export function HLDOutput({
             </div>
           )}
         </main>
+
+        {/* ── Right: chat drawer — hidden on diagram tab ── */}
+        {chatMode && activeView !== 'diagram' && (
+          <aside className={styles.chatDrawer} aria-label="AI Chat">
+            <div className={styles.chatDrawerHeader}>
+              <span className={styles.chatDrawerTitle}>
+                <MessageSquare size={13} /> Architecture Assistant
+              </span>
+              <button className={styles.chatDrawerClose} onClick={() => setChatMode(false)} title="Close chat">
+                ✕
+              </button>
+            </div>
+            <div className={styles.chatDrawerBody}>
+              <ChatPanel hld={hld} sessionId={sessionId} onEdit={handleChatEdit} />
+            </div>
+          </aside>
+        )}
 
       </div>
 
@@ -658,16 +735,21 @@ function GeneratingPanel({
   rawTokens: string
   onCancel: () => void
 }) {
-  const templateOpt = FRAMEWORK_OPTIONS.find(t => t.id === template)
-  const sections    = customSections?.map(s => s.name) ?? templateOpt?.default_sections ?? [
-    'Overview', 'Architecture', 'ADRs', 'Diagrams', 'Risks',
+  const templateOpt    = FRAMEWORK_OPTIONS.find(t => t.id === template)
+  const docSections    = customSections?.map(s => s.name) ?? templateOpt?.default_sections ?? [
+    'Overview', 'Architecture', 'Decisions', 'Diagrams', 'Risks',
   ]
+  // ADRs and Diagrams are always generated but tracked as a group at the end
+  const EXTRA_ITEMS    = ['Architecture Decisions (ADRs)', 'C4 Diagrams']
+  const allItems       = [...docSections, ...EXTRA_ITEMS]
 
   const { projectName, completedTitles, activeTitle, activeContent } = extractLiveData(rawTokens)
   const doneCount = completedTitles.length
-  const activeIdx = Math.min(doneCount, sections.length - 1)
-  const pct       = sections.length > 0
-    ? Math.min(Math.round((doneCount / sections.length) * 100), 95)
+  const activeIdx = Math.min(doneCount, docSections.length - 1)
+  // extras flip to done only when all sections are done
+  const allSectionsDone = doneCount >= docSections.length
+  const pct       = allItems.length > 0
+    ? Math.min(Math.round((doneCount / allItems.length) * 100), 95)
     : 0
 
   return (
@@ -694,11 +776,12 @@ function GeneratingPanel({
           </div>
 
           <div className={styles.genSectionList}>
-            {sections.map((sec, i) => {
-              const done   = i < doneCount
-              const active = i === activeIdx && rawTokens.length > 0
+            {allItems.map((sec, i) => {
+              const isExtra = i >= docSections.length
+              const done    = isExtra ? allSectionsDone : i < doneCount
+              const active  = !isExtra && i === activeIdx && rawTokens.length > 0
               return (
-                <div key={i} className={styles.genSec}>
+                <div key={i} className={`${styles.genSec} ${isExtra ? styles.genSecExtra : ''}`}>
                   <span className={`${styles.genSecIcon} ${done ? styles.genSecDone : active ? styles.genSecActive : styles.genSecPending}`}>
                     {done && <Check size={10} strokeWidth={3} />}
                   </span>

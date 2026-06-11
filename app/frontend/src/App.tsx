@@ -54,16 +54,20 @@ export function App() {
   const [template, setTemplate]     = useState<HLDTemplate | null>((saved.template as HLDTemplate) ?? null)
   const [customSections, setCustomSections]         = useState<Section[] | undefined>((saved.customSections as Section[]) ?? undefined)
   const [customTemplateText, setCustomTemplateText] = useState<string | undefined>(undefined)
-  const [preloadedHld, setPreloadedHld]             = useState<HLDDocument | null>((saved.preloadedHld as HLDDocument) ?? null)
+  // Not persisted to sessionStorage — restored from backend DB by HLDOutput on mount.
+  const [preloadedHld, setPreloadedHld]             = useState<HLDDocument | null>(null)
 
-  // Persist whenever relevant state changes
+  // Persist whenever relevant state changes.
+  // NOTE: preloadedHld is intentionally excluded — the full HLD JSON is
+  // hundreds of KB and routinely exceeds the 5 MB sessionStorage quota.
+  // HLDOutput restores it from the backend DB (loadSession) instead.
   useEffect(() => {
     try {
       sessionStorage.setItem(SS_KEY, JSON.stringify({
-        specText, sessionId, projectName, template, customSections, preloadedHld,
+        specText, sessionId, projectName, template, customSections,
       }))
     } catch { /* storage quota exceeded — swallow silently */ }
-  }, [specText, sessionId, projectName, template, customSections, preloadedHld])
+  }, [specText, sessionId, projectName, template, customSections])
 
   const handleSpecReady = (text: string, sid?: string, name?: string) => {
     setSpecText(text)
@@ -215,6 +219,7 @@ export function App() {
                 customSections={customSections}
                 customTemplateText={customTemplateText}
                 preloadedHld={preloadedHld}
+                onGenerated={setPreloadedHld}
               />
             ) : (
               <Navigate to="/" replace />

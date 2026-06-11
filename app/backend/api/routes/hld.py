@@ -80,6 +80,9 @@ async def stream_hld(
         # Send a cleaned sentinel that the frontend can use for parsing
         raw = "".join(accumulated)
         cleaned = _strip_fences(raw)
+        logger.info("[hld] stream complete — raw=%d chars cleaned=%d chars", len(raw), len(cleaned))
+        if not cleaned.strip().startswith('{'):
+            logger.error("[hld] stream output does not start with '{' — first 200 chars: %s", cleaned[:200])
         yield f"data: {json.dumps({'cleaned': cleaned})}\n\n"
         yield "data: [DONE]\n\n"
 
