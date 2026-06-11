@@ -64,9 +64,10 @@ def _render_hld_system(
     template: HLDTemplate,
     custom_sections: list[str] | None = None,
     custom_template_text: str | None = None,
-    thoughtworks_mode: bool = False,
+    thoughtworks_mode: bool = True,  # always on — engineering best practices are the product
 ) -> str:
-    overlay = "\n\n" + prompts.render(_TW_OVERLAY_PROMPT) if thoughtworks_mode else ""
+    # Engineering best practices overlay is always appended
+    overlay = "\n\n" + prompts.render(_TW_OVERLAY_PROMPT)
 
     # User uploaded their own template file
     if template == HLDTemplate.CUSTOM and custom_template_text:

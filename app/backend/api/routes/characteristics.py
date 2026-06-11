@@ -3,14 +3,18 @@ API routes for architectural characteristics detection and prioritization.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
-from typing import Any, List
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from api.deps import get_characteristics_service
 from application.characteristics_service import CharacteristicsService
 from infrastructure.session_storage import SessionStorage, get_storage
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/characteristics", tags=["characteristics"])
 
@@ -26,8 +30,9 @@ class CharacteristicOut(BaseModel):
     priority: int = Field(ge=1, le=10, description="Priority 1-10")
     confidence: int = Field(ge=0, le=100, description="Detection confidence 0-100%")
     evidence: List[str] = Field(description="Spec quotes supporting detection")
+    summary: Optional[str] = Field(default=None, description="≤15-word plain-language reason")
     rationale: str = Field(description="Why this matters for THIS system")
-    source: str = Field(description="ai_detected | user_adjusted | interview_revealed")
+    source: str = Field(description="ai_detected | user_adjusted | manual")
     locked: bool = Field(description="Whether user has finalized priorities")
     history: List[dict[str, Any]] = Field(description="Audit trail of changes")
 
@@ -35,6 +40,7 @@ class CharacteristicOut(BaseModel):
 class DetectRequest(BaseModel):
     """Request to detect characteristics from spec."""
     session_id: str
+    force: bool = False  # Set True to bypass cache and re-run detection
 
 
 class DetectResponse(BaseModel):
@@ -45,10 +51,24 @@ class DetectResponse(BaseModel):
     count: int = Field(description="Number of characteristics detected (0-12)")
 
 
+class CharacteristicItem(BaseModel):
+    """Validated shape of a single characteristic in an update-priorities request."""
+    id: str
+    label: str
+    priority: int = Field(ge=1, le=10)
+    confidence: int = Field(ge=0, le=100)
+    evidence: List[str] = []
+    summary: Optional[str] = None
+    rationale: str = ""
+    source: str = "ai_detected"
+    locked: bool = False
+    history: List[dict[str, Any]] = []
+
+
 class UpdatePrioritiesRequest(BaseModel):
     """Request to update characteristic priorities after user reordering."""
     session_id: str
-    characteristics: List[dict[str, Any]] = Field(
+    characteristics: List[CharacteristicItem] = Field(
         description="Full characteristic objects with updated priorities"
     )
 
@@ -58,15 +78,6 @@ class UpdatePrioritiesResponse(BaseModel):
     session_id: str
     status: str
     updated_at: str
-
-
-# ---------------------------------------------------------------------------
-# Dependency Injection
-# ---------------------------------------------------------------------------
-
-def get_characteristics_service() -> CharacteristicsService:
-    """Provide CharacteristicsService instance."""
-    return CharacteristicsService()
 
 
 # ---------------------------------------------------------------------------
@@ -82,24 +93,28 @@ async def detect_characteristics(
     """
     Analyze specification and detect architectural characteristics.
 
-    This is Phase 2a: AI-driven characteristic detection.
-
-    Process:
-    1. Read spec from session storage (input.md)
-    2. Call CharacteristicsService to analyze and detect
-    3. Save results to characteristics.json
-    4. Return to frontend for user review
-
-    Returns 0-12 characteristics based on evidence in spec.
+    Idempotent: if characteristics have already been detected for this session,
+    the cached result is returned immediately without re-running the LLM.
+    Pass force=true in the request body to override and re-detect.
     """
 
-    print(f"\n[CharacteristicsAPI] Detecting characteristics for session: {body.session_id}")
+    logger.info("[CharacteristicsAPI] Detect request for session: %s", body.session_id)
 
-    # Verify session exists
     if not storage.session_exists(body.session_id):
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Load specification
+    # Idempotency: return cached result if detection has already run
+    existing = storage.read_characteristics(body.session_id)
+    if existing and existing.get("characteristics") and not body.force:
+        cached = existing["characteristics"]
+        logger.info("[CharacteristicsAPI] Returning cached characteristics (%d items)", len(cached))
+        return DetectResponse(
+            session_id=body.session_id,
+            characteristics=[CharacteristicOut(**c) for c in cached],
+            detected_at=existing.get("detected_at", ""),
+            count=len(cached),
+        )
+
     spec_text = storage.read_input_md(body.session_id)
     if not spec_text:
         raise HTTPException(
@@ -107,12 +122,10 @@ async def detect_characteristics(
             detail="No specification found. Please upload documents first."
         )
 
-    print(f"[CharacteristicsAPI] Loaded spec: {len(spec_text)} chars")
+    logger.info("[CharacteristicsAPI] Running detection on spec (%d chars)…", len(spec_text))
 
-    # Detect characteristics
     characteristics = await char_svc.detect_characteristics(spec_text)
 
-    # Save to storage
     timestamp = datetime.now(timezone.utc).isoformat()
     storage.write_characteristics(
         body.session_id,
@@ -123,7 +136,7 @@ async def detect_characteristics(
         }
     )
 
-    print(f"[CharacteristicsAPI] Saved {len(characteristics)} characteristics")
+    logger.info("[CharacteristicsAPI] Detected and cached %d characteristics", len(characteristics))
 
     return DetectResponse(
         session_id=body.session_id,
@@ -139,26 +152,17 @@ async def update_priorities(
     storage: SessionStorage = Depends(get_storage),
 ) -> UpdatePrioritiesResponse:
     """
-    User manually adjusts characteristic priorities.
+    User manually adjusts characteristic priorities (drag-and-drop reordering).
 
-    This is Phase 2b: User prioritization via drag-and-drop UI.
-
-    Process:
-    1. Load existing characteristics
-    2. Update priorities and add history entry
-    3. Mark source as 'user_adjusted'
-    4. Save back to storage
-
-    This becomes the "application-wide" priority baseline for interview phase.
+    Only characteristics whose priority actually changed are marked user_adjusted.
+    Items added manually by the user keep source='manual'.
     """
 
-    print(f"\n[CharacteristicsAPI] Updating priorities for session: {body.session_id}")
+    logger.info("[CharacteristicsAPI] Updating priorities for session: %s", body.session_id)
 
-    # Verify session exists
     if not storage.session_exists(body.session_id):
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Load existing characteristics
     char_data = storage.read_characteristics(body.session_id)
     if not char_data:
         raise HTTPException(
@@ -166,27 +170,34 @@ async def update_priorities(
             detail="No characteristics found. Run detection first."
         )
 
-    # Update with user's priorities
+    # Build a lookup of existing priorities so we only stamp changed items
+    existing_priorities: dict[str, int] = {
+        c["id"]: c.get("priority", 5)
+        for c in char_data.get("characteristics", [])
+    }
+
     timestamp = datetime.now(timezone.utc).isoformat()
-    updated_characteristics = body.characteristics
+    updated_characteristics: list[dict[str, Any]] = []
 
-    for char in updated_characteristics:
-        # Add history entry
-        if 'history' not in char:
-            char['history'] = []
+    for char in body.characteristics:
+        d = char.model_dump()
 
-        char['history'].append({
-            'phase': 'user_prioritization',
-            'priority': char.get('priority', 5),
-            'timestamp': timestamp
+        # Only update source if priority genuinely changed (and not manually added)
+        if d["source"] != "manual":
+            old_priority = existing_priorities.get(d["id"])
+            if old_priority is not None and old_priority != d["priority"]:
+                d["source"] = "user_adjusted"
+
+        d.setdefault("history", [])
+        d["history"].append({
+            "phase": "user_prioritization",
+            "priority": d["priority"],
+            "timestamp": timestamp,
         })
 
-        # Mark as user-adjusted
-        char['source'] = 'user_adjusted'
+        logger.debug("  - %s: priority → %d/10 source=%s", d["label"], d["priority"], d["source"])
+        updated_characteristics.append(d)
 
-        print(f"  - {char['label']}: priority updated to {char['priority']}/10")
-
-    # Save updated characteristics
     storage.write_characteristics(
         body.session_id,
         {
@@ -196,7 +207,7 @@ async def update_priorities(
         }
     )
 
-    print(f"[CharacteristicsAPI] Updated {len(updated_characteristics)} priorities")
+    logger.info("[CharacteristicsAPI] Updated %d priorities", len(updated_characteristics))
 
     return UpdatePrioritiesResponse(
         session_id=body.session_id,
@@ -210,20 +221,13 @@ async def get_characteristics(
     session_id: str,
     storage: SessionStorage = Depends(get_storage),
 ) -> DetectResponse:
-    """
-    Retrieve existing characteristics for a session.
+    """Retrieve existing characteristics for a session."""
 
-    Used when user navigates back to characteristics page
-    or when interview phase needs to load priorities.
-    """
+    logger.info("[CharacteristicsAPI] Fetching characteristics for session: %s", session_id)
 
-    print(f"\n[CharacteristicsAPI] Fetching characteristics for session: {session_id}")
-
-    # Verify session exists
     if not storage.session_exists(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Load characteristics
     char_data = storage.read_characteristics(session_id)
     if not char_data or not char_data.get("characteristics"):
         raise HTTPException(

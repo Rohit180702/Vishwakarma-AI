@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 
 from api.middleware import register_exception_handlers
-from api.routes import chat, hld, sessions, interview, characteristics, impact, auth, users, reviews
+from api.routes import auth, chat, characteristics, framework, hld, impact, interview, reviews, sessions, users
 from config import get_settings
 from infrastructure.database import init_db
 
@@ -68,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(characteristics.router, prefix="/api/v1")
     app.include_router(impact.router, prefix="/api/v1")
     app.include_router(interview.router, prefix="/api/v1")
+    app.include_router(framework.router, prefix="/api/v1")
 
     register_exception_handlers(app)
 

@@ -27,9 +27,18 @@ Identify: (a) every named technology or platform, (b) every hard constraint, (c)
 or compliance mention, (d) every performance or scale target. Flag anything the spec leaves
 ambiguous — these become "TBD — decision needed" entries.
 
-**Step 2 — Identify the top quality attributes (internal):**
-List the 3–5 most important quality attributes implied or stated in the spec. For each, note what
-makes it non-trivially hard to achieve in this specific system.
+**Step 2 — Load quality attributes from established characteristics (internal):**
+The spec may contain an "Architecture Characteristics (User-Prioritized)" section. If present,
+use those characteristics directly — they were detected from the spec with evidence and confirmed
+by the user. Do NOT re-derive or contradict them.
+
+- Use high-priority characteristics (priority ≥ 7) as hard architectural constraints: every
+  major decision must explicitly account for them.
+- Use medium-priority characteristics (priority 4–6) as design quality targets.
+- Use low-priority characteristics (priority ≤ 3) as aspirational but non-blocking.
+
+If no characteristics section is present, derive the dominant quality attributes from the spec
+and note them as inferred (not user-confirmed).
 
 **Step 3 — Identify the key architectural decisions (internal):**
 List the 3–5 most significant decisions that must be made. For each, name at least 2 viable

@@ -4,7 +4,18 @@ SPECIFICATION:
 
 ---
 
-TASK: Analyze this specification and generate the minimum set of high-value architectural questions needed for HLD generation.
+ESTABLISHED ARCHITECTURE CHARACTERISTICS:
+
+The following quality attributes were already detected from the specification and confirmed by the
+user. Treat them as established context — do NOT generate questions that ask about them again.
+Instead, let them shape which gaps still need to be resolved.
+
+{characteristics_context}
+
+---
+
+TASK: Analyze this specification and the established characteristics above, then generate the
+minimum set of high-value architectural questions needed for HLD generation.
 
 ANALYSIS PROCESS:
 
@@ -13,48 +24,36 @@ ANALYSIS PROCESS:
    - Identify explicit requirements (clearly stated)
    - Identify implicit requirements (implied from context)
    - Mark ambiguous or unclear areas
-   - Recognize what's missing but architecturally critical
+   - Recognize what is architecturally critical but still unresolved
 
-**Step 2: Categorize Gaps by Tier**
+**Step 2: Cross-Reference with Established Characteristics**
+   - For each established characteristic, check: does the spec already answer HOW to achieve it?
+   - If a characteristic is established (e.g. Security priority 9) but the mechanism is unclear
+     (e.g. auth model, data classification), that mechanism IS a valid question
+   - Do not ask "how important is security?" — that is already answered
+   - Do ask "what authentication mechanism aligns with your compliance constraints?" — that is a gap
 
-Tier 1 - Business Critical (MUST ask):
-   - System boundaries, core domain
-   - Scale expectations, availability requirements
-   - Security posture, compliance needs
+**Step 3: Categorize Remaining Gaps**
 
-Tier 2 - Architecture Shaping (SHOULD ask):
-   - Data architecture, integration strategy
-   - Deployment model, performance requirements
-   - Multi-tenancy, eventing patterns
+   Apply the Tier prioritization defined in your system instructions (Tier 1 → Tier 3).
+   Tier 1 gaps are asked first. Tier 3 gaps are only asked if they are still blocking HLD.
 
-Tier 3 - Optimization (COULD ask):
-   - Caching, search, analytics
-   - Observability, cost optimization
+**Step 4: Determine Question Count**
+   - Generate exactly the questions required to resolve the remaining gaps
+   - If the spec and established characteristics together already answer a topic, skip it
+   - A complete, detailed spec with fully established characteristics may need zero questions
+   - Quality of questions determines HLD quality — not quantity
 
-**Step 3: Determine Question Count**
-   - Count Tier 1 + Tier 2 gaps
-   - Add Tier 3 gaps only if needed
-   - Guideline cap: ~20 questions maximum
-   - Minimum: 0 questions (if spec is perfect)
+**Step 5: Generate Questions**
+   - Each question targets ONE unresolved architectural decision
+   - Each question must cite evidence from the spec that shows the gap
+   - Skip any question whose answer will not change the resulting architecture
 
-Question count logic:
-   - Excellent spec (no gaps) → 0-3 questions
-   - Good spec (minor gaps) → 3-7 questions
-   - Medium spec (moderate gaps) → 7-12 questions
-   - Poor spec (many gaps) → 12-20 questions
-
-**Step 4: Generate Questions**
-   - Focus on highest impact decisions first
-   - Only ask if answer materially changes architecture
-   - Skip areas where spec is already clear
-   - Ensure questions are independent when possible
-   - Each question must cite evidence from spec
-
-**Step 5: Generate Solution Options** (3-5 per question)
-   - Each option must be realistic and implementable
-   - Provide specific benefits, risks, and trade-offs
-   - Mark ONE as recommended based on spec context
-   - Solutions should represent genuine alternatives
+**Step 6: Generate Solution Options**
+   - Provide the meaningful options that genuinely exist for this system and domain
+   - Include specific benefits, risks, and trade-offs for each option
+   - Mark the option best supported by the spec and established characteristics as recommended
+   - Do not generate options that are unrealistic for this system's domain or constraints
 
 OUTPUT FORMAT (strict JSON):
 
@@ -63,31 +62,24 @@ OUTPUT FORMAT (strict JSON):
   "questions": [
     {{
       "id": "q1",
-      "question": "What is your expected system latency requirement?",
-      "why_critical": "Latency requirements fundamentally affect database choice, caching strategy, infrastructure design, API architecture, and cost structure. Different latency targets lead to dramatically different architectural patterns.",
-      "context_from_spec": "You mentioned real-time processing on page 2 and fast user experience on page 5, but did not specify concrete latency targets or measurements.",
+      "question": "<single, precise architectural decision question>",
+      "why_critical": "<one sentence: which architectural component or decision depends on this answer>",
+      "context_from_spec": "<what the spec says or does not say that creates this gap>",
       "evidence": [
-        "Page 2: system must support real-time processing",
-        "Page 5: users expect fast and responsive interface"
+        "<exact spec quote or reference that triggered this question>"
       ],
       "solutions": [
         {{
           "id": "sol1",
-          "title": "<100ms (Ultra-Low Latency)",
-          "description": "Aggressive sub-100ms target for critical operations. High cost and complexity but exceptional user experience.",
+          "title": "<option name>",
+          "description": "<1-2 sentences covering approach, benefit, and key trade-off>",
           "recommended": false
         }},
         {{
           "id": "sol2",
-          "title": "100-500ms (Balanced)",
-          "description": "Standard web performance for most business apps. Cost-effective with proven patterns and good user experience.",
+          "title": "<option name>",
+          "description": "<1-2 sentences covering approach, benefit, and key trade-off>",
           "recommended": true
-        }},
-        {{
-          "id": "sol3",
-          "title": "500ms-2s (Simple)",
-          "description": "Relaxed latency prioritizing simplicity and cost. Minimal cost but may not meet real-time expectations.",
-          "recommended": false
         }}
       ]
     }}
@@ -102,47 +94,31 @@ CRITICAL REQUIREMENTS:
    - Escape ALL quotes inside strings (use backslash)
    - NO line breaks inside string values
    - NO apostrophes or use proper escaping
-   - Test your JSON mentally before outputting
 
-2. **Dynamic Question Count**
-   - Generate only the questions needed for HLD (based on gaps)
-   - Minimum: 0 questions (if spec is complete)
-   - Maximum: ~20 questions (guideline, not strict)
-   - Quality > Quantity
+2. **Question Count Is Evidence-Driven**
+   - Generate only the questions needed to produce a complete HLD
+   - A minimal, focused set of high-impact questions is better than an exhaustive checklist
+   - Each question must close a real gap — not satisfy a quota
 
 3. **Each Question Must Have:**
-   - Clear spec evidence (cite exact quotes - escape quotes!)
-   - Precise wording (one decision per question)
-   - Why it matters (architectural impact - single line!)
-   - 3-5 solution options
+   - Clear spec evidence citing the gap (not the answer)
+   - A single, unambiguous decision to resolve
+   - Why it matters stated as architectural impact
+   - Options that represent genuine alternatives for this system
 
-4. **Each Solution Format:**
-   - Title: Clear, concise option name
-   - Description: 1-2 sentences max covering benefits, risks, and trade-offs
-   - No separate benefits/risks/tradeoffs arrays - keep it simple!
-   - **Avoid overwhelming users with too much text**
+4. **Each Solution Must:**
+   - Have a clear title and a concise description covering approach, benefit, and trade-off
+   - Represent a distinct architectural approach — not a parameter variation
+   - Be realistic and implementable for this system's domain
 
-5. **Exactly ONE solution per question marked as recommended**
-   - Based on spec context and hints
+5. **Exactly ONE solution per question marked recommended**
+   - Based on spec context, domain, and established characteristics
+   - If characteristics establish a high priority (e.g. Security 9/10), the recommended option
+     must be consistent with satisfying that characteristic
 
-6. **Questions must be evidence-based**
-   - Every question must cite spec quotes (escape quotes!)
-   - No generic checklist questions
-   - Only ask if answer changes architecture
+6. **Do not re-ask about established characteristics**
+   - If a characteristic is listed as established, its importance is settled
+   - Only ask about HOW to achieve it if the mechanism is genuinely unclear
 
-7. **Solutions must be genuinely different architectural choices**
-   - Not just parameter variations
-   - Each represents a distinct approach
-
-FOCUS AREAS (if relevant to spec):
-
-- System latency/performance requirements
-- Scalability expectations (users, data, traffic)
-- Data consistency vs availability trade-offs
-- Security and compliance requirements
-- Integration complexity and external dependencies
-- Deployment and operational constraints
-- Cost vs capability trade-offs
-- Technology stack choices with architectural impact
-
-Remember: Only ask questions where the answer significantly changes the architecture. If the spec is already clear, don't ask.
+Remember: The goal is the minimum information required to make the highest-quality architecture
+decisions. If the spec and characteristics already answer a question, do not ask it.

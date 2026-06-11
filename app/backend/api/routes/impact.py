@@ -4,13 +4,17 @@ Analyzes trade-offs when users select non-recommended solutions.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from api.deps import get_impact_service
 from application.impact_service import ImpactAnalysisService
 from infrastructure.session_storage import SessionStorage, get_storage
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/impact", tags=["impact"])
 
@@ -49,15 +53,6 @@ class ImpactAnalysisResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Dependency Injection
-# ---------------------------------------------------------------------------
-
-def get_impact_service() -> ImpactAnalysisService:
-    """Provide ImpactAnalysisService instance."""
-    return ImpactAnalysisService()
-
-
-# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -81,8 +76,8 @@ async def analyze_solution_impact(
     4. Return severity and affected characteristics
     """
 
-    print(f"\n[ImpactAPI] Analyzing impact for session: {body.session_id}")
-    print(f"[ImpactAPI] Question: {body.question_id}, Chosen: {body.chosen_solution_id}")
+    logger.info("[ImpactAPI] Analyzing impact — session=%s question=%s chosen=%s",
+                body.session_id, body.question_id, body.chosen_solution_id)
 
     # Verify session exists
     if not storage.session_exists(body.session_id):
@@ -137,7 +132,7 @@ async def analyze_solution_impact(
         chosen_solution=chosen_solution
     )
 
-    print(f"[ImpactAPI] Analysis complete. Severity: {analysis['severity']}")
+    logger.info("[ImpactAPI] Analysis complete — severity=%s", analysis["severity"])
 
     return ImpactAnalysisResponse(
         severity=analysis["severity"],

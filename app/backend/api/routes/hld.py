@@ -6,11 +6,13 @@ POST /api/v1/hld/diagram/query   → conversational diagram flow query
 from __future__ import annotations
 
 import json
-
+import logging
 import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, status
+
+logger = logging.getLogger(__name__)
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -26,8 +28,9 @@ from api.models.responses import (
 )
 from application.hld_generation import HLDGenerationService
 from domain.models import (
-    ADR, ADRAlternative, C4Diagram, DiagramLevel,
-    HLDDocument, HLDSection, HLDTemplate,
+    ADR, ADRAlternative,
+    C4Boundary, C4Diagram, C4Node, C4NodeType, C4Relationship,
+    DiagramLevel, HLDDocument, HLDSection, HLDTemplate,
 )
 from domain.quality_strict import HLDStrictValidator
 
@@ -44,11 +47,14 @@ async def generate_hld(
     body: GenerateHLDRequest,
     hld_svc: HLDGenerationService = Depends(get_hld_generation_service),
 ) -> GenerateHLDResponse:
+    logger.info("[hld] generate — template=%s spec=%d chars", body.template, len(body.spec_text))
     doc = await hld_svc.generate(
         body.spec_text, HLDTemplate(body.template),
         body.custom_sections, body.custom_template_text,
         body.thoughtworks_mode,
     )
+    logger.info("[hld] generate complete — sections=%d adrs=%d diagrams=%d",
+                len(doc.sections), len(doc.adrs), len(doc.diagrams))
     return _to_response(doc)
 
 
@@ -87,24 +93,6 @@ async def stream_hld(
 # ---------------------------------------------------------------------------
 # Strict quality evaluation endpoint
 # ---------------------------------------------------------------------------
-
-@router.post(
-    "/evaluate",
-    response_model=StrictQualityReportOut,
-    status_code=status.HTTP_200_OK,
-    summary="Run strict quality checks on a previously generated HLD",
-)
-async def evaluate_hld(body: GenerateHLDRequest) -> StrictQualityReportOut:
-    """
-    Accepts the same payload as /generate but does NOT call the LLM.
-    Instead, it expects the caller to pass in a pre-generated HLD as
-    custom_template_text and runs strict quality checks on it.
-
-    More practically: the eval script calls /generate first to get the HLD JSON,
-    then POSTs that JSON here for the strict report.
-    """
-    raise NotImplementedError("Use /evaluate/doc directly with a parsed HLD document.")
-
 
 @router.post(
     "/evaluate/doc",
@@ -175,8 +163,41 @@ def _parse_hld_from_dict(data: dict) -> HLDDocument:
     diagrams = []
     for d in data.get("diagrams", []):
         try:
+            nodes = [
+                C4Node(
+                    id=n.get("id", ""),
+                    type=C4NodeType(n.get("type", "system")),
+                    label=n.get("label", ""),
+                    description=n.get("description", ""),
+                    technology=n.get("technology", ""),
+                )
+                for n in d.get("nodes", [])
+                if n.get("id")
+            ]
+            relationships = [
+                C4Relationship(
+                    from_id=r.get("from_id", ""),
+                    to_id=r.get("to_id", ""),
+                    label=r.get("label", ""),
+                    technology=r.get("technology", ""),
+                    async_comm=r.get("async_comm", False),
+                )
+                for r in d.get("relationships", [])
+            ]
+            boundaries = [
+                C4Boundary(
+                    id=b.get("id", ""),
+                    label=b.get("label", ""),
+                    node_ids=b.get("node_ids", []),
+                )
+                for b in d.get("boundaries", [])
+            ]
             diagrams.append(C4Diagram(
                 level=DiagramLevel(d.get("level", "context")),
+                title=d.get("title", ""),
+                nodes=nodes,
+                relationships=relationships,
+                boundaries=boundaries,
                 mermaid_syntax=d.get("mermaid_syntax", ""),
             ))
         except ValueError:

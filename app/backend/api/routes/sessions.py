@@ -48,6 +48,7 @@ class SessionDetail(BaseModel):
     hld_json: str     # contents of hld.json
     created_at: datetime
     qa_pairs: list[QAPair] = []
+    has_characteristics: bool = False  # true once characteristics detection has run
 
 
 class SaveSessionRequest(BaseModel):
@@ -72,6 +73,7 @@ class UploadedDocumentInfo(BaseModel):
 
 class UploadSessionResponse(BaseModel):
     session_id: str
+    project_name: str
     documents: List[UploadedDocumentInfo]
     unified_spec_text: str
     created_at: datetime
@@ -95,12 +97,16 @@ async def list_sessions() -> list[SessionSummary]:
         except Exception:
             has_hld = False
         has_interview = bool(store.read_answers(s.id))
+        char_data = store.read_characteristics(s.id)
+        has_characteristics = bool(char_data and char_data.get("characteristics"))
         if has_hld:
             stage = "generate"
         elif has_interview:
             stage = "format"
-        else:
+        elif has_characteristics:
             stage = "interview"
+        else:
+            stage = "characteristics"
         result.append(SessionSummary(
             id=s.id,
             project_name=s.project_name,
@@ -133,6 +139,9 @@ async def get_session_by_id(session_id: str) -> SessionDetail:
         for q in questions
     ]
 
+    char_data = store.read_characteristics(session_id)
+    has_characteristics = bool(char_data and char_data.get("characteristics"))
+
     return SessionDetail(
         id=session.id,
         project_name=session.project_name,
@@ -141,6 +150,7 @@ async def get_session_by_id(session_id: str) -> SessionDetail:
         hld_json=store.read_hld(session_id),
         created_at=session.created_at,
         qa_pairs=qa_pairs,
+        has_characteristics=has_characteristics,
     )
 
 
@@ -200,10 +210,14 @@ async def upload_documents(files: List[UploadFile] = File(...)) -> UploadSession
         session_id = str(uuid.uuid4())
         created_at = datetime.now(timezone.utc)
 
+        # Auto-number: "Project - 1", "Project - 2", …
+        project_count = await HLDSession.count()
+        project_name = f"Project - {project_count + 1}"
+
         # Persist metadata in MongoDB
         hld_session = HLDSession(
             id=session_id,
-            project_name="Untitled Project",
+            project_name=project_name,
             template="",
             created_at=created_at,
         )
@@ -224,6 +238,7 @@ async def upload_documents(files: List[UploadFile] = File(...)) -> UploadSession
 
         return UploadSessionResponse(
             session_id=session_id,
+            project_name=project_name,
             documents=doc_infos,
             unified_spec_text=unified_spec_text,
             created_at=created_at,

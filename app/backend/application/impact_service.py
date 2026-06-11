@@ -5,11 +5,15 @@ Analyzes how interview decisions affect prioritized characteristics.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any, Dict, List
 
 from anthropic import AsyncAnthropic
 from config import get_settings
+from application.llm_utils import extract_json
+
+logger = logging.getLogger(__name__)
 
 
 class ImpactAnalysisService:
@@ -81,38 +85,25 @@ class ImpactAnalysisService:
             chosen_solution_description=chosen_solution['description']
         )
 
-        print(f"\n[ImpactService] Analyzing trade-off for question: {question['id']}")
-        print(f"[ImpactService] Recommended: {recommended_solution['title']}")
-        print(f"[ImpactService] Chosen: {chosen_solution['title']}")
+        logger.info("[ImpactService] Analyzing trade-off — question=%s recommended=%s chosen=%s",
+                    question["id"], recommended_solution["title"], chosen_solution["title"])
 
         response = await self.client.messages.create(
             model=self.model,
             max_tokens=2000,
-            temperature=0.0,  # Deterministic analysis
+            temperature=0.0,
             system=self.system_prompt,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            timeout=120.0,
         )
 
         response_text = response.content[0].text
-
-        # Extract JSON
-        if "```json" in response_text:
-            start = response_text.find("```json") + 7
-            end = response_text.find("```", start)
-            json_str = response_text[start:end].strip()
-        elif "```" in response_text:
-            start = response_text.find("```") + 3
-            end = response_text.find("```", start)
-            json_str = response_text[start:end].strip()
-        else:
-            json_str = response_text.strip()
+        json_str = extract_json(response_text)
 
         try:
             analysis = json.loads(json_str)
         except json.JSONDecodeError as e:
-            print(f"\n[ImpactService] ❌ JSON PARSE ERROR: {str(e)}")
-            print(f"[ImpactService] Response:\n{json_str}")
-            # Return fallback analysis
+            logger.error("[ImpactService] JSON parse error at line %d col %d: %s", e.lineno, e.colno, e)
             return {
                 "severity": "moderate",
                 "is_recommended": False,
@@ -133,7 +124,7 @@ class ImpactAnalysisService:
             'title': recommended_solution['title']
         }
 
-        print(f"[ImpactService] Severity: {analysis['severity']}")
-        print(f"[ImpactService] Affected characteristics: {len(analysis.get('affected_characteristics', []))}")
+        logger.info("[ImpactService] severity=%s affected_characteristics=%d",
+                    analysis.get("severity"), len(analysis.get("affected_characteristics", [])))
 
         return analysis

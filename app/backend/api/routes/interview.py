@@ -15,6 +15,7 @@ GET  /api/v1/interview/{session_id}/enhanced-spec → input.md + Q&A markdown
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -23,8 +24,10 @@ from pydantic import BaseModel
 
 from application.interview_service import InterviewService
 from infrastructure.database import HLDSession
-from infrastructure.session_storage import get_storage
+from infrastructure.session_storage import SessionStorage, get_storage
 from api.deps import get_interview_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/interview", tags=["interview"])
 
@@ -49,6 +52,12 @@ class Question(BaseModel):
     solutions: List[SolutionOption]
 
 
+class ProgressOut(BaseModel):
+    answered: int
+    total: int
+    completed: bool
+
+
 class InterviewStartRequest(BaseModel):
     session_id: str
 
@@ -57,7 +66,7 @@ class InterviewStartResponse(BaseModel):
     session_id: str
     questions: List[Question]
     current_question: Question
-    progress: dict
+    progress: ProgressOut
 
 
 class AnswerRequest(BaseModel):
@@ -70,7 +79,7 @@ class AnswerRequest(BaseModel):
 class AnswerResponse(BaseModel):
     session_id: str
     next_question: Optional[Question]
-    progress: dict
+    progress: ProgressOut
     interview_completed: bool
 
 
@@ -87,7 +96,7 @@ class InterviewStateResponse(BaseModel):
     session_id: str
     questions: List[Question]
     current_question: Optional[Question]
-    progress: dict
+    progress: ProgressOut
     interview_completed: bool
 
 
@@ -104,18 +113,18 @@ class EnhancedSpecResponse(BaseModel):
 
 def _build_answer(question: dict, selected_solution: dict, custom_input: str, skipped: bool) -> dict:
     return {
-        "question_id": question["id"],
-        "question_text": question["question"],
+        "question_id":          question["id"],
+        "question_text":        question["question"],
         "selected_solution_id": selected_solution["id"],
-        "solution_title": selected_solution["title"],
-        "custom_input": custom_input,
-        "was_skipped": skipped,
-        "answered_at": datetime.now(timezone.utc).isoformat(),
+        "solution_title":       selected_solution["title"],
+        "custom_input":         custom_input,
+        "was_skipped":          skipped,
+        "answered_at":          datetime.now(timezone.utc).isoformat(),
     }
 
 
-def _progress(answered: int, total: int, completed: bool) -> dict:
-    return {"answered": answered, "total": total, "completed": completed}
+def _progress(answered: int, total: int, completed: bool) -> ProgressOut:
+    return ProgressOut(answered=answered, total=total, completed=completed)
 
 
 def _next_question(questions: list[dict], answers: list[dict]) -> Optional[Question]:
@@ -133,25 +142,27 @@ def _next_question(questions: list[dict], answers: list[dict]) -> Optional[Quest
 async def start_interview(
     body: InterviewStartRequest,
     interview_svc: InterviewService = Depends(get_interview_service),
+    storage: SessionStorage = Depends(get_storage),
 ) -> InterviewStartResponse:
     session = await HLDSession.get(body.session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
-    store = get_storage()
-
-    # --- Idempotency: return cached questions if they already exist ---
-    cached = store.read_questions(body.session_id)
+    # Idempotency: return cached questions if they already exist
+    cached = storage.read_questions(body.session_id)
     if cached:
-        print(f"\n[Interview] Returning cached questions for session {body.session_id}")
-        answers = store.read_answers(body.session_id)
+        logger.info("[Interview] Returning cached questions for session %s", body.session_id)
+        answers = storage.read_answers(body.session_id)
         try:
             questions_list = [Question(**q) for q in cached]
         except Exception as e:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Data validation error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Data validation error: {e}",
+            )
         current_idx = len(answers)
-        current_q = questions_list[current_idx] if current_idx < len(questions_list) else questions_list[0]
-        completed = len(answers) >= len(questions_list)
+        current_q   = questions_list[current_idx] if current_idx < len(questions_list) else questions_list[0]
+        completed   = len(answers) >= len(questions_list)
         return InterviewStartResponse(
             session_id=body.session_id,
             questions=questions_list,
@@ -159,18 +170,30 @@ async def start_interview(
             progress=_progress(len(answers), len(questions_list), completed),
         )
 
-    # --- First time: generate questions via Claude ---
-    spec_text = store.read_input_md(body.session_id)
+    # First time: generate questions via Claude
+    spec_text = storage.read_input_md(body.session_id)
     if not spec_text:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Specification file not found for this session")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Specification file not found for this session",
+        )
 
-    print(f"\n[Interview] Generating questions for session {body.session_id}")
-    raw_questions = await interview_svc.generate_questions(spec_text)
+    char_data = storage.read_characteristics(body.session_id)
+    characteristics = char_data.get("characteristics", []) if char_data else []
+    logger.info(
+        "[Interview] Generating questions for session %s (%d characteristics)",
+        body.session_id, len(characteristics),
+    )
+
+    raw_questions = await interview_svc.generate_questions(spec_text, characteristics)
     if not raw_questions:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate questions")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate questions",
+        )
 
-    store.write_questions(body.session_id, raw_questions)
-    store.write_answers(body.session_id, [])
+    storage.write_questions(body.session_id, raw_questions)
+    storage.write_answers(body.session_id, [])
 
     session.interview_completed = False
     await session.save()
@@ -178,7 +201,12 @@ async def start_interview(
     try:
         questions_list = [Question(**q) for q in raw_questions]
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Data validation error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Data validation error: {e}",
+        )
+
+    logger.info("[Interview] Generated %d questions for session %s", len(questions_list), body.session_id)
 
     return InterviewStartResponse(
         session_id=body.session_id,
@@ -189,30 +217,48 @@ async def start_interview(
 
 
 @router.post("/answer", response_model=AnswerResponse, status_code=status.HTTP_200_OK)
-async def submit_answer(body: AnswerRequest) -> AnswerResponse:
+async def submit_answer(
+    body: AnswerRequest,
+    storage: SessionStorage = Depends(get_storage),
+) -> AnswerResponse:
     session = await HLDSession.get(body.session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
-    store = get_storage()
-    questions = store.read_questions(body.session_id)
+    questions = storage.read_questions(body.session_id)
     if not questions:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Interview not started")
 
-    question = next((q for q in questions if q["id"] == body.question_id), None)
-    if not question:
+    question_idx = next((i for i, q in enumerate(questions) if q["id"] == body.question_id), None)
+    if question_idx is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Question not found")
+
+    question = questions[question_idx]
+
+    # Enforce sequential answering: reject future questions that haven't been reached yet
+    existing_answers = storage.read_answers(body.session_id)
+    answered_ids = {a["question_id"] for a in existing_answers}
+    if body.question_id not in answered_ids and question_idx > len(existing_answers):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Questions must be answered in order",
+        )
 
     solution = next((s for s in question["solutions"] if s["id"] == body.selected_solution_id), None)
     if not solution:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selected solution not found")
 
-    answers = store.upsert_answer(body.session_id, _build_answer(question, solution, body.custom_input, False))
+    answers   = storage.upsert_answer(body.session_id, _build_answer(question, solution, body.custom_input, False))
     completed = len(answers) >= len(questions)
 
     if completed:
         session.interview_completed = True
         await session.save()
+
+    logger.debug(
+        "[Interview] Answer recorded: session=%s question=%s solution=%s",
+        body.session_id, body.question_id, body.selected_solution_id,
+    )
 
     return AnswerResponse(
         session_id=body.session_id,
@@ -223,13 +269,15 @@ async def submit_answer(body: AnswerRequest) -> AnswerResponse:
 
 
 @router.post("/skip", response_model=AnswerResponse, status_code=status.HTTP_200_OK)
-async def skip_question(body: SkipQuestionRequest) -> AnswerResponse:
+async def skip_question(
+    body: SkipQuestionRequest,
+    storage: SessionStorage = Depends(get_storage),
+) -> AnswerResponse:
     session = await HLDSession.get(body.session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
-    store = get_storage()
-    questions = store.read_questions(body.session_id)
+    questions = storage.read_questions(body.session_id)
     if not questions:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Interview not started")
 
@@ -242,14 +290,19 @@ async def skip_question(body: SkipQuestionRequest) -> AnswerResponse:
         question["solutions"][0] if question["solutions"] else None,
     )
     if not recommended:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No recommended solution found")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No recommended solution found",
+        )
 
-    answers = store.upsert_answer(body.session_id, _build_answer(question, recommended, "", True))
+    answers   = storage.upsert_answer(body.session_id, _build_answer(question, recommended, "", True))
     completed = len(answers) >= len(questions)
 
     if completed:
         session.interview_completed = True
         await session.save()
+
+    logger.debug("[Interview] Skipped question %s for session %s", body.question_id, body.session_id)
 
     return AnswerResponse(
         session_id=body.session_id,
@@ -260,17 +313,19 @@ async def skip_question(body: SkipQuestionRequest) -> AnswerResponse:
 
 
 @router.post("/skip-all", response_model=AnswerResponse, status_code=status.HTTP_200_OK)
-async def skip_all_questions(body: SkipAllRequest) -> AnswerResponse:
+async def skip_all_questions(
+    body: SkipAllRequest,
+    storage: SessionStorage = Depends(get_storage),
+) -> AnswerResponse:
     session = await HLDSession.get(body.session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
-    store = get_storage()
-    questions = store.read_questions(body.session_id)
+    questions = storage.read_questions(body.session_id)
     if not questions:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Interview not started")
 
-    answers = store.read_answers(body.session_id)
+    answers      = storage.read_answers(body.session_id)
     answered_ids = {a["question_id"] for a in answers}
 
     for question in questions:
@@ -282,9 +337,11 @@ async def skip_all_questions(body: SkipAllRequest) -> AnswerResponse:
             if recommended:
                 answers.append(_build_answer(question, recommended, "", True))
 
-    store.write_answers(body.session_id, answers)
+    storage.write_answers(body.session_id, answers)
     session.interview_completed = True
     await session.save()
+
+    logger.info("[Interview] Skipped all remaining questions for session %s", body.session_id)
 
     return AnswerResponse(
         session_id=body.session_id,
@@ -295,20 +352,22 @@ async def skip_all_questions(body: SkipAllRequest) -> AnswerResponse:
 
 
 @router.get("/{session_id}", response_model=InterviewStateResponse)
-async def get_interview_state(session_id: str) -> InterviewStateResponse:
+async def get_interview_state(
+    session_id: str,
+    storage: SessionStorage = Depends(get_storage),
+) -> InterviewStateResponse:
     session = await HLDSession.get(session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
-    store = get_storage()
-    questions = store.read_questions(session_id)
+    questions = storage.read_questions(session_id)
     if not questions:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Interview not started")
 
-    answers = store.read_answers(session_id)
+    answers        = storage.read_answers(session_id)
     questions_list = [Question(**q) for q in questions]
-    completed = len(answers) >= len(questions)
-    current_q = _next_question(questions, answers)
+    completed      = len(answers) >= len(questions)
+    current_q      = _next_question(questions, answers)
 
     return InterviewStateResponse(
         session_id=session_id,
@@ -323,17 +382,19 @@ async def get_interview_state(session_id: str) -> InterviewStateResponse:
 async def get_enhanced_spec(
     session_id: str,
     interview_svc: InterviewService = Depends(get_interview_service),
+    storage: SessionStorage = Depends(get_storage),
 ) -> EnhancedSpecResponse:
     session = await HLDSession.get(session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
-    store = get_storage()
-    original_spec = store.read_input_md(session_id)
-    questions = store.read_questions(session_id)
-    answers = store.read_answers(session_id)
+    original_spec   = storage.read_input_md(session_id)
+    questions       = storage.read_questions(session_id)
+    answers         = storage.read_answers(session_id)
+    char_data       = storage.read_characteristics(session_id)
+    characteristics = char_data.get("characteristics", []) if char_data else []
 
-    enhanced_spec = interview_svc.build_enhanced_spec(original_spec, questions, answers)
+    enhanced_spec = interview_svc.build_enhanced_spec(original_spec, questions, answers, characteristics)
 
     return EnhancedSpecResponse(
         session_id=session_id,
