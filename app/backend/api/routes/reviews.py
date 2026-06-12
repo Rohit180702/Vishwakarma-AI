@@ -106,6 +106,7 @@ async def submit_for_review(
         reviewers.append(reviewer)
 
     # Check for duplicate submissions (same session + same reviewers + pending status)
+    # Only block if submitting EXACT SAME content to a reviewer with pending review
     for reviewer in reviewers:
         existing_pending = await ReviewRequestDocument.find_one(
             ReviewRequestDocument.session_id == body.session_id,
@@ -123,6 +124,8 @@ async def submit_for_review(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"A pending review already exists for reviewer {reviewer.name} with the same HLD content. Please make changes before resubmitting."
                 )
+            # If HLD has changed, allow resubmission - the new version will be created
+            # and the old pending review will remain for the old version
 
     # Create HLD version
     # Get latest version number for this session
