@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.encoders import jsonable_encoder
+from fastapi.staticfiles import StaticFiles
 
 from api.middleware import register_exception_handlers
 from api.routes import auth, chat, characteristics, framework, hld, impact, interview, reviews, sessions, users
@@ -75,6 +77,35 @@ def create_app() -> FastAPI:
     @app.get("/healthz", tags=["ops"])
     async def health() -> dict:
         return {"status": "ok"}
+
+    # ── Static frontend serving (production / Replit) ──────────────────────
+    # Serves the built React app from app/frontend/dist/ when it exists.
+    # In local dev the Vite dev server handles the frontend instead.
+    frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+    if frontend_dist.exists():
+        assets_dir = frontend_dist / "assets"
+        if assets_dir.exists():
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+        # Serve any other static files at root level (favicon, robots.txt, etc.)
+        @app.get("/favicon.ico", include_in_schema=False)
+        async def favicon() -> FileResponse:
+            return FileResponse(str(frontend_dist / "favicon.ico"))
+
+        # SPA catch-all: return index.html for every non-API path so that
+        # React Router client-side routes (e.g. /dashboard, /review/123) work.
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def serve_spa(full_path: str) -> FileResponse:
+            index = frontend_dist / "index.html"
+            return FileResponse(str(index))
+
+        logger.info("Serving frontend static files from %s", frontend_dist)
+    else:
+        logger.info(
+            "Frontend dist not found at %s — run 'npm run build' in app/frontend/ "
+            "or use the Vite dev server for local development.",
+            frontend_dist,
+        )
 
     return app
 
