@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router-dom'
-import { FolderOpen, Home } from 'lucide-react'
+import { FolderOpen } from 'lucide-react'
 import { UserProfile } from '@/components/UserProfile'
-import { useAuth } from '@/contexts/AuthContext'
 import styles from './AppHeader.module.css'
 
 interface AppHeaderProps {
@@ -11,13 +10,11 @@ interface AppHeaderProps {
 
 export function AppHeader({ projectName, right }: AppHeaderProps) {
   const navigate = useNavigate()
-  const { user } = useAuth()
 
   return (
     <header className={styles.header}>
-      <div className={styles.logo}>
+      <div className={styles.logo} onClick={() => navigate('/dashboard')} role="button" style={{ cursor: 'pointer' }}>
         <div className={styles.logoMark}>
-          {/* Isometric cube — three faces represent architecture layers */}
           <svg viewBox="0 0 24 24" fill="none">
             <path d="M12 2 L22 7 L12 12 L2 7 Z" fill="rgba(255,255,255,0.95)" />
             <path d="M2 7 L2 17 L12 22 L12 12 Z" fill="rgba(255,255,255,0.5)" />
@@ -36,16 +33,6 @@ export function AppHeader({ projectName, right }: AppHeaderProps) {
         )}
       </div>
       <div className={styles.right}>
-        {user && (
-          <button
-            className={styles.dashboardBtn}
-            onClick={() => navigate('/dashboard')}
-            title="Go to Dashboard"
-          >
-            <Home size={18} />
-            <span>Dashboard</span>
-          </button>
-        )}
         {right}
         <UserProfile />
       </div>

@@ -23,9 +23,11 @@ class HLDSession(Document):
     template: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     interview_completed: bool = False
+    author_id: str | None = None  # set to logged-in user id when created via auth
 
     class Settings:
         name = "hld_sessions"
+        indexes = ["author_id"]
 
 
 class UserDocument(Document):

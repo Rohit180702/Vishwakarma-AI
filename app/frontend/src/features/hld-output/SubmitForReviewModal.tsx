@@ -9,11 +9,13 @@ import styles from './SubmitForReviewModal.module.css'
 interface SubmitForReviewModalProps {
   hld: HLDDocument
   sessionId?: string
+  mode?: 'submit' | 'add' | 'revise'
+  existingReviewerIds?: string[]
   onClose: () => void
   onSuccess: () => void
 }
 
-export function SubmitForReviewModal({ hld, sessionId, onClose, onSuccess }: SubmitForReviewModalProps) {
+export function SubmitForReviewModal({ hld, sessionId, mode = 'submit', existingReviewerIds = [], onClose, onSuccess }: SubmitForReviewModalProps) {
   const [users, setUsers] = useState<UserSummary[]>([])
   const [selectedReviewers, setSelectedReviewers] = useState<Set<string>>(new Set())
   const [message, setMessage] = useState('')
@@ -21,12 +23,25 @@ export function SubmitForReviewModal({ hld, sessionId, onClose, onSuccess }: Sub
   const [submitting, setSubmitting] = useState(false)
   const { showToast } = useToast()
 
+  const titles = { submit: 'Submit for Review', add: 'Add Reviewer', revise: 'Submit Revised Version' }
+  const ctaLabels = { submit: 'Submit for Review', add: 'Add Reviewer', revise: 'Submit Revised Version' }
+
   useEffect(() => {
     async function loadReviewers() {
       try {
         const allUsers = await listUsers()
-        const reviewers = allUsers.filter(u => u.role === 'reviewer')
+        let reviewers: UserSummary[]
+        if (mode === 'add') {
+          // Only show reviewers not already assigned
+          reviewers = allUsers.filter(u => u.role === 'reviewer' && !existingReviewerIds.includes(u.id))
+        } else {
+          reviewers = allUsers.filter(u => u.role === 'reviewer')
+        }
         setUsers(reviewers)
+        // For revise mode: pre-select all previous reviewers
+        if (mode === 'revise') {
+          setSelectedReviewers(new Set(existingReviewerIds.filter(id => reviewers.some(u => u.id === id))))
+        }
       } catch (error: any) {
         showToast(error.message || 'Failed to load reviewers', 'error')
       } finally {
@@ -79,7 +94,7 @@ export function SubmitForReviewModal({ hld, sessionId, onClose, onSuccess }: Sub
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
         <div className={styles.header}>
-          <h2>Submit for Review</h2>
+          <h2>{titles[mode]}</h2>
           <button className={styles.closeBtn} onClick={onClose}>×</button>
         </div>
 
@@ -91,7 +106,10 @@ export function SubmitForReviewModal({ hld, sessionId, onClose, onSuccess }: Sub
             </div>
           ) : users.length === 0 ? (
             <div className={styles.empty}>
-              <p>No reviewers available in the system.</p>
+              {mode === 'add'
+                ? <p>All available reviewers have already been assigned.</p>
+                : <p>No reviewers available in the system.</p>
+              }
               <p className={styles.hint}>Please ask an admin to register reviewer accounts.</p>
             </div>
           ) : (
@@ -145,7 +163,7 @@ export function SubmitForReviewModal({ hld, sessionId, onClose, onSuccess }: Sub
             onClick={handleSubmit}
             disabled={loading || users.length === 0 || selectedReviewers.size === 0 || submitting}
           >
-            {submitting ? 'Submitting...' : 'Submit for Review'}
+            {submitting ? 'Submitting...' : ctaLabels[mode]}
           </Button>
         </div>
       </div>

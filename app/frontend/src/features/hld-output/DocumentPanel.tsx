@@ -1,16 +1,20 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 import mermaid from 'mermaid'
 import { marked } from 'marked'
 import TurndownService from 'turndown'
 // @ts-expect-error — no types published for this plugin
 import { gfm } from 'turndown-plugin-gfm'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, MessageSquare, X, Send } from 'lucide-react'
 import type { Components } from 'react-markdown'
 import type { HLDSection, HLDDocument, Comment } from '@/types'
-import { CommentSection } from './CommentSection'
+import { addComment } from '@/api/client'
+import { useToast } from '@/components/Toast/ToastContext'
 import styles from './DocumentPanel.module.css'
+
 
 // ---------------------------------------------------------------------------
 // Markdown ↔ HTML helpers for the WYSIWYG editor
@@ -56,7 +60,25 @@ function InlineMermaid({ code }: { code: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Custom code renderer — detects mermaid fences
+// Inject <mark> tags into a markdown string for each quoted text span.
+// Works on the raw markdown string so bold/italic/links are preserved
+// after rehype-raw parses the injected HTML.
+// ---------------------------------------------------------------------------
+function injectHighlights(markdown: string, quotes: string[]): string {
+  let result = markdown
+  for (const quote of quotes) {
+    if (!quote) continue
+    // Escape special regex chars in the quoted text
+    const escaped = quote.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const re = new RegExp(escaped, 'g')
+    result = result.replace(re, `<mark class="${styles.quotedMark}">${quote}</mark>`)
+  }
+  return result
+}
+
+// ---------------------------------------------------------------------------
+// Shared markdown components (code blocks + mermaid). rehype-raw handles
+// the injected <mark> tags.
 // ---------------------------------------------------------------------------
 const markdownComponents: Components = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,12 +86,7 @@ const markdownComponents: Components = {
     const match = /language-(\w+)/.exec(className || '')
     const lang = match ? match[1] : ''
     const code = String(children).replace(/\n$/, '')
-
-    if (lang === 'mermaid') {
-      return <InlineMermaid code={code} />
-    }
-
-    // Block code (has className) vs inline code
+    if (lang === 'mermaid') return <InlineMermaid code={code} />
     if (className) {
       return (
         <pre className={styles.codeBlock}>
@@ -77,7 +94,6 @@ const markdownComponents: Components = {
         </pre>
       )
     }
-
     return <code className={styles.inlineCode} {...props}>{children}</code>
   },
 }
@@ -88,6 +104,11 @@ const REVIEWER_RE = /^>?\s*⚠️\s*\*{0,2}Reviewer challenge:?\*{0,2}.*$/gim
 
 function stripInternalCallouts(content: string): string {
   return content.replace(REVIEWER_RE, '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+// Remove the first H1/H2 line if it duplicates the section title shown in the UI
+function stripLeadingHeading(content: string): string {
+  return content.replace(/^#{1,2}\s+.+(\r?\n|$)/, '').trimStart()
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +129,14 @@ interface DocumentPanelProps {
   onActiveSectionChange?: (key: string) => void
 }
 
+interface InlineCommentState {
+  sectionKey: string
+  quotedText: string
+  // Fixed viewport position for the floating box
+  anchorX: number
+  anchorY: number
+}
+
 export function DocumentPanel({
   hld,
   onSectionEdit,
@@ -125,6 +154,15 @@ export function DocumentPanel({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  // Inline commenting
+  const [selectionBubble, setSelectionBubble] = useState<{
+    sectionKey: string; quotedText: string; x: number; y: number
+  } | null>(null)
+  const [pendingComment, setPendingComment] = useState<InlineCommentState | null>(null)
+  const [commentText, setCommentText] = useState('')
+  const [submittingComment, setSubmittingComment] = useState(false)
+  const { showToast } = useToast()
 
   // Scroll to and highlight a section when scrollToKey changes
   useEffect(() => {
@@ -173,6 +211,60 @@ export function DocumentPanel({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hld.sections, onActiveSectionChange])
 
+  // Text-selection → floating comment bubble
+  const handleMouseUp = useCallback((sectionKey: string) => {
+    if (!canComment || !reviewId) return
+    const sel = window.getSelection()
+    if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+      setSelectionBubble(null)
+      return
+    }
+    const text = sel.toString().trim()
+    const range = sel.getRangeAt(0)
+    const rect = range.getBoundingClientRect()
+    setSelectionBubble({
+      sectionKey,
+      quotedText: text,
+      x: rect.left + rect.width / 2,
+      y: rect.top - 8,  // just above the selection
+    })
+  }, [canComment, reviewId])
+
+  // Clear bubble when clicking elsewhere
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-comment-bubble]') && !target.closest('[data-comment-box]')) {
+        setSelectionBubble(null)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const openCommentBox = useCallback((sectionKey: string, quotedText: string, anchorX = window.innerWidth / 2, anchorY = window.innerHeight / 2) => {
+    setPendingComment({ sectionKey, quotedText, anchorX, anchorY })
+    setSelectionBubble(null)
+    setCommentText('')
+    window.getSelection()?.removeAllRanges()
+  }, [])
+
+  const submitInlineComment = useCallback(async () => {
+    if (!pendingComment || !reviewId || !commentText.trim()) return
+    setSubmittingComment(true)
+    try {
+      await addComment(reviewId, pendingComment.sectionKey, commentText.trim(), undefined, pendingComment.quotedText || undefined)
+      onCommentsChange?.()
+      setPendingComment(null)
+      setCommentText('')
+      showToast('Comment added', 'success')
+    } catch {
+      showToast('Failed to add comment', 'error')
+    } finally {
+      setSubmittingComment(false)
+    }
+  }, [pendingComment, reviewId, commentText, onCommentsChange, showToast])
+
   const toggleSection = (key: string) =>
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }))
 
@@ -195,8 +287,79 @@ export function DocumentPanel({
     sectionRefs.current[key] = el
   }, [])
 
+  // Clamp the floating box so it stays within the viewport
+  const clampedBoxLeft = pendingComment
+    ? Math.min(Math.max(pendingComment.anchorX - 180, 12), window.innerWidth - 372)
+    : 0
+  const clampedBoxTop = pendingComment
+    ? Math.min(pendingComment.anchorY, window.innerHeight - 280)
+    : 0
+
   return (
     <div className={styles.doc}>
+      {/* Floating selection bubble — fixed position portal */}
+      {selectionBubble && createPortal(
+        <div
+          data-comment-bubble
+          className={styles.selectionBubble}
+          style={{ left: selectionBubble.x, top: selectionBubble.y }}
+          onMouseDown={e => e.preventDefault()}
+        >
+          <button
+            className={styles.selectionBubbleBtn}
+            onClick={() => openCommentBox(selectionBubble.sectionKey, selectionBubble.quotedText, selectionBubble.x, selectionBubble.y + 36)}
+          >
+            <MessageSquare size={12} />
+            Comment
+          </button>
+        </div>,
+        document.body
+      )}
+
+      {/* Floating comment box — portal so it stays at selection position */}
+      {pendingComment && createPortal(
+        <div
+          data-comment-box
+          className={styles.floatingCommentBox}
+          style={{ left: clampedBoxLeft, top: clampedBoxTop }}
+        >
+          {pendingComment.quotedText && (
+            <blockquote className={styles.pendingQuote}>{pendingComment.quotedText}</blockquote>
+          )}
+          <div className={styles.inlineCommentHeader}>
+            <MessageSquare size={13} className={styles.inlineCommentIcon} />
+            <span>{pendingComment.quotedText ? 'Comment on selection' : 'Add comment'}</span>
+            <button className={styles.inlineCommentClose} onClick={() => setPendingComment(null)}>
+              <X size={13} />
+            </button>
+          </div>
+          <textarea
+            className={styles.inlineCommentTextarea}
+            placeholder="Leave a comment… (⌘↵ to post)"
+            value={commentText}
+            onChange={e => setCommentText(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitInlineComment()
+              if (e.key === 'Escape') setPendingComment(null)
+            }}
+            autoFocus
+            rows={3}
+          />
+          <div className={styles.inlineCommentActions}>
+            <button className={styles.inlineCommentCancel} onClick={() => setPendingComment(null)}>Cancel</button>
+            <button
+              className={styles.inlineCommentSubmit}
+              disabled={!commentText.trim() || submittingComment}
+              onClick={submitInlineComment}
+            >
+              <Send size={12} />
+              {submittingComment ? 'Posting…' : 'Comment'}
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* ── Document header ── */}
       <div className={styles.docHeader}>
         <div className={styles.docBadge}>
@@ -207,22 +370,52 @@ export function DocumentPanel({
         <h1 className={styles.docTitle}>{hld.project_name}</h1>
       </div>
 
+      {/* ── Reviewer hint bar ── */}
+      {canComment && (
+        <div className={styles.reviewerHint}>
+          <MessageSquare size={13} />
+          <span>Select any text to leave an inline comment, or click the <MessageSquare size={11} style={{ display: 'inline', verticalAlign: 'middle' }} /> next to a section title to comment on the whole section.</span>
+        </div>
+      )}
+
       {hld.sections.map(section => {
         const isCollapsed  = !!collapsed[section.key]
         const isEditing    = editingKey === section.key
         const isHighlighted = highlightedKey === section.key
+        const sectionComments = comments.filter(c => c.section === section.key)
         return (
           <div
             key={section.key}
             ref={setRef(section.key)}
             className={`${styles.section} ${isCollapsed ? styles.sectionCollapsed : ''} ${isHighlighted ? styles.sectionHighlighted : ''}`}
           >
-            {/* ── Section title row: number · title · [edit/save/cancel] · collapse ── */}
+            {/* ── Section title row ── */}
             <div className={styles.sectionTitleRow}>
               <span className={styles.sectionNum}>{section.number}.</span>
               <h2 className={styles.sectionTitle}>{section.title}</h2>
-              {/* Inline edit controls — appear on hover (or always when editing) */}
-              {isEditing ? (
+              {/* Comment count badge */}
+              {sectionComments.length > 0 && (
+                <span className={styles.commentBadge}>
+                  <MessageSquare size={11} />
+                  {sectionComments.length}
+                </span>
+              )}
+              {/* Section-level comment button (fallback to inline select) */}
+              {canComment && pendingComment?.sectionKey !== section.key && (
+                <button
+                  className={styles.sectionCommentBtn}
+                  title="Add comment to this section"
+                  onClick={e => {
+                    e.stopPropagation()
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                    openCommentBox(section.key, '', rect.left, rect.bottom + 8)
+                  }}
+                >
+                  <MessageSquare size={13} />
+                </button>
+              )}
+              {/* Edit controls — only for authors */}
+              {onSectionEdit && (isEditing ? (
                 <div className={styles.titleEditActions}>
                   <button className={styles.cancelBtn} onClick={e => { e.stopPropagation(); cancelEdit() }}>Cancel</button>
                   <button className={styles.editBtn} onClick={e => { e.stopPropagation(); saveEdit(section.key) }}>Save</button>
@@ -235,7 +428,7 @@ export function DocumentPanel({
                 >
                   Edit
                 </button>
-              )}
+              ))}
               <button
                 onClick={() => toggleSection(section.key)}
                 aria-expanded={!isCollapsed}
@@ -257,29 +450,29 @@ export function DocumentPanel({
                     className={`${styles.sectionContent} ${styles.editableContent}`}
                     contentEditable
                     suppressContentEditableWarning
-                    dangerouslySetInnerHTML={{ __html: mdToHtml(stripInternalCallouts(section.content)) }}
+                    dangerouslySetInnerHTML={{ __html: mdToHtml(stripLeadingHeading(stripInternalCallouts(section.content))) }}
                     onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); cancelEdit() } }}
                     aria-label={`Edit section ${section.title}`}
                     spellCheck
                   />
                 ) : (
-                  <div className={styles.sectionContent}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                      {stripInternalCallouts(section.content)}
+                  <div
+                    className={`${styles.sectionContent} ${canComment ? styles.commentable : ''}`}
+                    onMouseUp={() => handleMouseUp(section.key)}
+                  >
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeRaw]}
+                      components={markdownComponents}
+                    >
+                      {injectHighlights(
+                        stripLeadingHeading(stripInternalCallouts(section.content)),
+                        sectionComments.map(c => c.quoted_text ?? '').filter(Boolean)
+                      )}
                     </ReactMarkdown>
                   </div>
                 )}
 
-                {/* Comment section for reviewers */}
-                {reviewId && (
-                  <CommentSection
-                    reviewId={reviewId}
-                    sectionKey={section.key}
-                    comments={comments}
-                    canComment={canComment}
-                    onCommentAdded={() => onCommentsChange?.()}
-                  />
-                )}
               </div>
             )}
           </div>

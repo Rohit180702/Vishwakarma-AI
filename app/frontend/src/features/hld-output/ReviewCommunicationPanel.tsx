@@ -1,16 +1,32 @@
 import { useState, useEffect } from 'react'
-import { Send, MessageSquarePlus, Reply } from 'lucide-react'
+import { Send, MessageSquarePlus, Reply, CheckCircle, XCircle, RotateCcw, MessageSquare } from 'lucide-react'
 import { getSessionFeedback, addComment } from '@/api/client'
 import { Button } from '@/components/Button'
 import { useToast } from '@/components/Toast/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { ReviewActions } from './ReviewActions'
 import styles from './ReviewCommunicationPanel.module.css'
+
+interface ReviewerStatus {
+  id: string
+  name: string
+  status: string
+  reviewed_at: string | null
+}
 
 interface ReviewCommunicationPanelProps {
   sessionId: string
   versionId?: string | null
   reviewId?: string | null
   onNewComment?: () => void
+  onReviewDecision?: () => void
+  reviewStatus?: {
+    has_reviews: boolean
+    reviewers: ReviewerStatus[]
+    submitted_at: string | null
+  } | null
+  /** All inline document comments passed from HLDOutput so they appear in the Review tab */
+  inlineComments?: import('@/types').Comment[]
 }
 
 interface ReviewMessage {
@@ -25,7 +41,7 @@ interface ReviewMessage {
   replies?: ReviewMessage[]
 }
 
-export function ReviewCommunicationPanel({ sessionId, versionId, reviewId, onNewComment }: ReviewCommunicationPanelProps) {
+export function ReviewCommunicationPanel({ sessionId, versionId, reviewId, onNewComment, onReviewDecision, reviewStatus, inlineComments = [] }: ReviewCommunicationPanelProps) {
   const [messages, setMessages] = useState<ReviewMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [replyText, setReplyText] = useState('')
@@ -53,28 +69,12 @@ export function ReviewCommunicationPanel({ sessionId, versionId, reviewId, onNew
       // Transform comments and review statuses into a unified message list
       const messageList: ReviewMessage[] = []
 
-      // Add reviewer decisions as messages
-      data.reviews?.forEach((review: any) => {
-        if (review.status !== 'pending') {
-          const decisionText =
-            review.status === 'approved' ? 'approved this version' :
-            review.status === 'rejected' ? 'rejected this version' :
-            'requested changes'
+      // Decisions are already shown in the Review Status card — don't duplicate in Discussion
 
-          messageList.push({
-            id: `decision_${review.reviewer_id}`,
-            reviewer_id: review.reviewer_id,
-            reviewer_name: review.reviewer_name,
-            status: review.status,
-            content: decisionText,
-            created_at: review.reviewed_at || new Date().toISOString(),
-            is_decision: true
-          })
-        }
-      })
-
-      // Add all comments as messages
+      // Add only general discussion comments (not section-specific inline comments —
+      // those are already surfaced in the right column via the inlineComments prop)
       data.comments?.forEach((comment: any) => {
+        if (comment.section && comment.section !== 'general') return
         messageList.push({
           id: comment.id,
           reviewer_id: comment.reviewer_id,
@@ -206,7 +206,6 @@ export function ReviewCommunicationPanel({ sessionId, versionId, reviewId, onNew
         >
           <div className={styles.messageHeader}>
             <span className={styles.reviewerName}>
-              {message.is_decision ? '🎯 ' : '💬 '}
               {message.reviewer_name}
             </span>
             <span className={styles.messageTime}>
@@ -216,9 +215,9 @@ export function ReviewCommunicationPanel({ sessionId, versionId, reviewId, onNew
 
           {message.is_decision && (
             <div className={styles.decisionBadge} data-status={message.status}>
-              {message.status === 'approved' && '✅ Approved'}
-              {message.status === 'rejected' && '❌ Rejected'}
-              {message.status === 'changes_requested' && '🔄 Changes Requested'}
+              {message.status === 'approved' && <><CheckCircle size={13} /> Approved</>}
+              {message.status === 'rejected' && <><XCircle size={13} /> Rejected</>}
+              {message.status === 'changes_requested' && <><RotateCcw size={13} /> Changes Requested</>}
             </div>
           )}
 
@@ -286,75 +285,137 @@ export function ReviewCommunicationPanel({ sessionId, versionId, reviewId, onNew
     )
   }
 
+  const isReviewer = user?.role === 'reviewer'
+
+  // Group inline comments by section
+  const commentsBySection = inlineComments.reduce<Record<string, import('@/types').Comment[]>>((acc, c) => {
+    const key = c.section || 'general'
+    if (!acc[key]) acc[key] = []
+    acc[key].push(c)
+    return acc
+  }, {})
+
+  const totalComments = inlineComments.length + messages.length
+
   return (
-    <div className={styles.panel}>
-      <div className={styles.header}>
-        <div>
-          <h3>💬 Review Discussion</h3>
-          <p className={styles.headerHint}>
-            {user ? `You are: ${user.name} (${user.role})` : 'Shared space for reviewers and author'}
-          </p>
-        </div>
-        <span className={styles.count}>{messages.length}</span>
+    <div className={styles.reviewLayout}>
+
+      {/* ── Left column: status + actions ── */}
+      <div className={styles.leftCol}>
+        <p className={styles.colLabel}>Review Status</p>
+
+        {/* Author: submission banner */}
+        {!isReviewer && reviewStatus?.has_reviews && reviewStatus.reviewers?.length > 0 && (
+          <div className={styles.statusCard}>
+            <div className={styles.statusCardTitle}>
+              <CheckCircle size={13} className={styles.statusCardIcon} />
+              Submitted for review
+              {reviewStatus.submitted_at && (
+                <span className={styles.statusCardDate}>
+                  {new Date(reviewStatus.submitted_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+              )}
+            </div>
+            <div className={styles.reviewerRows}>
+              {reviewStatus.reviewers.map(r => {
+                const isApproved = r.status === 'approved'
+                const isRejected = r.status === 'rejected'
+                const isChanges = r.status === 'changes_requested'
+                return (
+                  <div key={r.id} className={styles.reviewerRow}>
+                    <span className={styles.reviewerAvatar}>{r.name.charAt(0).toUpperCase()}</span>
+                    <span className={styles.reviewerRowName}>{r.name}</span>
+                    <span className={`${styles.reviewerStatusBadge} ${isApproved ? styles.badgeApproved : isRejected ? styles.badgeRejected : isChanges ? styles.badgeChanges : styles.badgePending}`}>
+                      {isApproved ? 'Approved' : isRejected ? 'Rejected' : isChanges ? 'Changes requested' : 'Awaiting review'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Reviewer: decision */}
+        {isReviewer && reviewId && (
+          <div className={styles.decisionCard}>
+            <p className={styles.decisionCardTitle}>Your decision</p>
+            <ReviewActions reviewId={reviewId} onSuccess={() => { loadFeedback(); onReviewDecision?.() }} />
+          </div>
+        )}
+
+        {/* General discussion */}
+        <p className={styles.colLabel} style={{ marginTop: 20 }}>Discussion</p>
+        {effectiveReviewId && !showNewComment && (
+          <button className={styles.addDiscussionBtn} onClick={() => setShowNewComment(true)}>
+            <MessageSquarePlus size={13} /> Add comment
+          </button>
+        )}
+        {showNewComment && (
+          <div className={styles.discussionForm}>
+            <textarea
+              value={newCommentText}
+              onChange={e => setNewCommentText(e.target.value)}
+              placeholder="Write a comment…"
+              className={styles.discussionTextarea}
+              rows={3}
+              disabled={sending}
+              autoFocus
+            />
+            <div className={styles.discussionActions}>
+              <button className={styles.cancelBtn} onClick={() => { setShowNewComment(false); setNewCommentText('') }} disabled={sending}>Cancel</button>
+              <button className={styles.sendBtn} onClick={handleSendNewComment} disabled={!newCommentText.trim() || sending}>
+                <Send size={12} /> {sending ? 'Sending…' : 'Send'}
+              </button>
+            </div>
+          </div>
+        )}
+        {messages.length > 0 && (
+          <div className={styles.discussionList}>
+            {messages.map(m => <MessageBubble key={m.id} message={m} depth={0} />)}
+          </div>
+        )}
+        {messages.length === 0 && !showNewComment && (
+          <p className={styles.noDiscussion}>No discussion yet</p>
+        )}
       </div>
 
-      {/* New Comment Button */}
-      {effectiveReviewId && !showNewComment && (
-        <div className={styles.newCommentBar}>
-          <button
-            className={styles.newCommentBtn}
-            onClick={() => setShowNewComment(true)}
-          >
-            <MessageSquarePlus size={16} />
-            Add Comment
-          </button>
-        </div>
-      )}
+      {/* ── Right column: inline document comments ── */}
+      <div className={styles.rightCol}>
+        <p className={styles.colLabel}>
+          Inline comments
+          {totalComments > 0 && <span className={styles.commentCount}>{inlineComments.length}</span>}
+        </p>
 
-      {/* New Comment Form */}
-      {showNewComment && (
-        <div className={styles.commentForm}>
-          <textarea
-            value={newCommentText}
-            onChange={(e) => setNewCommentText(e.target.value)}
-            placeholder="Write a new comment..."
-            className={styles.textarea}
-            rows={3}
-            disabled={sending}
-            autoFocus
-          />
-          <div className={styles.formActions}>
-            <button
-              className={styles.cancelBtn}
-              onClick={() => {
-                setShowNewComment(false)
-                setNewCommentText('')
-              }}
-              disabled={sending}
-            >
-              Cancel
-            </button>
-            <button
-              className={styles.sendBtn}
-              onClick={handleSendNewComment}
-              disabled={!newCommentText.trim() || sending}
-            >
-              <Send size={14} />
-              {sending ? 'Sending...' : 'Send'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className={styles.messageList}>
-        {messages.length === 0 ? (
-          <div className={styles.empty}>
-            <p>No review feedback yet</p>
-            <p className={styles.emptyHint}>Review decisions and comments will appear here</p>
+        {inlineComments.length === 0 ? (
+          <div className={styles.noComments}>
+            <MessageSquare size={28} className={styles.noCommentsIcon} />
+            <p>No inline comments yet</p>
+            <p className={styles.noCommentsHint}>The reviewer can select text in the document to leave inline comments</p>
           </div>
         ) : (
-          messages.map((message) => (
-            <MessageBubble key={message.id} message={message} depth={0} />
+          Object.entries(commentsBySection).map(([section, sectionComments]) => (
+            <div key={section} className={styles.sectionGroup}>
+              <p className={styles.sectionGroupTitle}>
+                {section === 'final_decision' ? 'Final Decision' : section.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                <span className={styles.sectionGroupCount}>{sectionComments.length}</span>
+              </p>
+              {sectionComments.map(c => (
+                <div key={c.id} className={styles.commentCard}>
+                  {c.quoted_text && (
+                    <blockquote className={styles.commentQuote}>{c.quoted_text}</blockquote>
+                  )}
+                  <div className={styles.commentCardBody}>
+                    <div className={styles.commentCardMeta}>
+                      <span className={styles.commentCardAuthor}>{c.author_name ?? c.reviewer_name ?? 'Reviewer'}</span>
+                      <span className={styles.commentCardDate}>
+                        {new Date(c.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                    <p className={styles.commentCardText}>{c.content}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           ))
         )}
       </div>

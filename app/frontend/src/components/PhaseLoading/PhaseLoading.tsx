@@ -5,7 +5,7 @@ import styles from './PhaseLoading.module.css'
 interface PhaseLoadingProps {
   eyebrow: string
   title: string
-  typicalNote: string
+  typicalNote?: string
   steps?: string[]
   slowAfterSeconds?: number
   slowMessage?: string
@@ -14,7 +14,6 @@ interface PhaseLoadingProps {
 export function PhaseLoading({
   eyebrow,
   title,
-  typicalNote,
   steps = [],
   slowAfterSeconds = 22,
   slowMessage = 'Taking a bit longer — Claude is being thorough with your spec.',
@@ -78,11 +77,12 @@ export function PhaseLoading({
 
         <div className={styles.footer}>
           <span className={styles.elapsed}>{elapsed}s</span>
-          <span className={styles.sep}>·</span>
-          {elapsed >= slowAfterSeconds
-            ? <span className={styles.slow}>{slowMessage}</span>
-            : <span className={styles.note}>{typicalNote}</span>
-          }
+          {elapsed >= slowAfterSeconds && (
+            <>
+              <span className={styles.sep}>·</span>
+              <span className={styles.slow}>{slowMessage}</span>
+            </>
+          )}
         </div>
 
       </div>

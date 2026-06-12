@@ -3,7 +3,7 @@ import { jsonrepair } from 'jsonrepair'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertTriangle, ArrowLeft, BookMarked, Check, ChevronLeft, Download,
-  FileText, GitBranch, MessageSquare, PanelRightClose, PanelRightOpen, Send,
+  FileText, GitBranch, Inbox, MessageSquare, Send,
 } from 'lucide-react'
 import JSZip from 'jszip'
 import { Button } from '@/components/Button'
@@ -35,7 +35,7 @@ interface HLDOutputProps {
   onGenerated?: (hld: HLDDocument) => void
 }
 
-type View = 'document' | 'diagram' | 'adrs' | 'user-journeys' | 'business-rules'
+type View = 'document' | 'diagram' | 'adrs' | 'user-journeys' | 'business-rules' | 'review'
 type ErdTab = 'technical' | 'functional'
 type GenState = 'idle' | 'checking' | 'generating' | 'done' | 'error'
 
@@ -44,7 +44,8 @@ export function HLDOutput({
   customTemplateText, preloadedHld, onGenerated,
 }: HLDOutputProps) {
   const [searchParams] = useSearchParams()
-  const reviewId = searchParams.get('review')
+  const reviewId   = searchParams.get('review')
+  const urlSessionId = searchParams.get('session')   // when navigating from dashboard
   const isReviewMode = !!reviewId
 
   const [genState, setGenState]   = useState<GenState>(preloadedHld ? 'done' : 'idle')
@@ -54,6 +55,7 @@ export function HLDOutput({
 
   const viewKey = `vk_view_${sessionId ?? reviewId ?? 'default'}`
   const [activeView, setActiveView] = useState<View>(
+    // Reviewers land on Document first so they can read before deciding
     () => (sessionStorage.getItem(viewKey) as View) ?? 'document'
   )
   const setView = (v: View) => { setActiveView(v); sessionStorage.setItem(viewKey, v) }
@@ -64,21 +66,50 @@ export function HLDOutput({
   const [activeSectionKey, setActiveSectionKey] = useState<string | null>(null)
   const [saveStatus, setSaveStatus]   = useState<'idle' | 'saving' | 'saved'>('idle')
   const [chatMode, setChatMode]       = useState(true)
-  const [inboxOpen, setInboxOpen]     = useState(false)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
+  const [submitModalMode, setSubmitModalMode] = useState<'submit' | 'add' | 'revise'>('submit')
   const [reviewStatus, setReviewStatus]       = useState<any>(null)
   const [actualSessionId, setActualSessionId] = useState<string | undefined>(sessionId)
   const [comments, setComments]               = useState<import('@/types').Comment[]>([])
   const [currentReviewData, setCurrentReviewData] = useState<any>(null)
   const [versionNumber, setVersionNumber]     = useState<number | null>(null)
   const [versionId, setVersionId]             = useState<string | null>(null)
+  const [allVersions, setAllVersions]         = useState<{ version_id: string; version_number: number; created_at: string }[]>([])
+  const [selectedReviewVersionId, setSelectedReviewVersionId] = useState<string | null>(null)
+  // Ref so polling closure always reads the latest selected version without stale capture
+  const selectedReviewVersionIdRef = useRef<string | null>(null)
 
   const { showToast } = useToast()
   const { user }      = useAuth()
   const abortRef        = useRef<AbortController | null>(null)
   const generatingRef   = useRef(false)
   const saveTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingSaveRef  = useRef(false)
   const navigate        = useNavigate()
+
+  // Load HLD from ?session= URL param (dashboard "Open" navigation)
+  useEffect(() => {
+    if (!urlSessionId || preloadedHld || specText) return
+    setGenState('checking')
+    loadSession(urlSessionId)
+      .then((detail) => {
+        if (!detail?.hld_json) { setGenState('error'); setErrorMsg('Session not found'); return }
+        try {
+          const doc: HLDDocument = JSON.parse(detail.hld_json)
+          setHld(doc)
+          setActualSessionId(urlSessionId)
+          setGenState('done')
+        } catch {
+          setGenState('error')
+          setErrorMsg('Failed to parse session data')
+        }
+      })
+      .catch((e: any) => {
+        setErrorMsg(e.message || 'Failed to load session')
+        setGenState('error')
+        showToast(e.message || 'Failed to load session', 'error')
+      })
+  }, [urlSessionId, preloadedHld, specText, showToast])
 
   // Load HLD from review if in review mode
   useEffect(() => {
@@ -110,17 +141,9 @@ export function HLDOutput({
     }
   }, [reviewId, preloadedHld, showToast])
 
-  // Load feedback for authors
-  useEffect(() => {
-    const effectiveSessionId = actualSessionId || sessionId
-    if (!reviewId && effectiveSessionId && hld && user?.role === 'author') {
-      getSessionFeedback(effectiveSessionId)
-        .then((data) => setComments(data.comments || []))
-        .catch(() => { /* feedback is optional */ })
-    }
-  }, [reviewId, actualSessionId, sessionId, hld, user])
+  // Comments for authors are refreshed inside the polling interval above
 
-  // Poll review status every 10 seconds
+  // Poll review status + comments every 10 seconds
   useEffect(() => {
     const effectiveSessionId = actualSessionId || sessionId
     if (!effectiveSessionId) return
@@ -130,10 +153,26 @@ export function HLDOutput({
         const status = await getSessionReviewStatus(effectiveSessionId)
         setReviewStatus(status)
         const versions = await getSessionVersions(effectiveSessionId)
+        let latestVersionId: string | undefined
         if (versions.length > 0) {
+          setAllVersions(versions)
           const latest = versions[0]
           setVersionNumber(latest.version_number)
-          if (!reviewId && user?.role === 'author') setVersionId(latest.version_id)
+          if (!reviewId && user?.role === 'author') {
+            setVersionId(latest.version_id)
+            latestVersionId = latest.version_id
+            // Default selected review version to latest if not set by user
+            if (!selectedReviewVersionIdRef.current) {
+              setSelectedReviewVersionId(latest.version_id)
+              selectedReviewVersionIdRef.current = latest.version_id
+            }
+          }
+        }
+        // Refresh inline comments for authors — use user-selected version, not always latest
+        if (!reviewId && user?.role === 'author') {
+          const reviewVid = selectedReviewVersionIdRef.current || latestVersionId
+          const feedback = await getSessionFeedback(effectiveSessionId, reviewVid)
+          setComments(feedback.comments || [])
         }
       } catch { /* silently fail */ }
     }
@@ -381,9 +420,10 @@ export function HLDOutput({
     }
   }
 
-  const handleSubmitClick = async () => {
+  const handleSubmitClick = async (mode: 'submit' | 'add' | 'revise' = 'submit') => {
     try {
       await ensureSaved()
+      setSubmitModalMode(mode)
       setShowSubmitModal(true)
     } catch (error) {
       showToast('Failed to save changes before submission', 'error')
@@ -504,6 +544,21 @@ export function HLDOutput({
             <TabButton id="tab-user-journeys" active={activeView === 'user-journeys'} icon={<FileText size={13} />} label="User Journeys" onClick={() => setView('user-journeys')} />
             <TabButton id="tab-business-rules" active={activeView === 'business-rules'} icon={<BookMarked size={13} />} label="Business Rules" onClick={() => setView('business-rules')} />
           </>}
+          {showReviewInbox && (
+            <TabButton
+              id="tab-review"
+              active={activeView === 'review'}
+              icon={<Inbox size={13} />}
+              label={
+                isReviewMode || comments.length > 0
+                  ? `Review${comments.length > 0 ? ` (${comments.length})` : ''}`
+                  : reviewStatus?.has_reviews
+                  ? 'Review · Pending'
+                  : 'Review'
+              }
+              onClick={() => setView('review')}
+            />
+          )}
         </nav>
 
         {/* Right: save indicator + chat + submit + export + inbox toggle */}
@@ -524,28 +579,31 @@ export function HLDOutput({
             <MessageSquare size={13} />
             <span>Chat with AI</span>
           </button>
-          {user?.role === 'author' && !isReviewMode && (
-            <button
-              className={styles.submitBtn}
-              onClick={handleSubmitClick}
-              title="Submit for Review"
-            >
-              <Send size={13} /> Submit for Review
-            </button>
-          )}
+          {user?.role === 'author' && !isReviewMode && (() => {
+            const hasChangesRequested = reviewStatus?.reviewers?.some(r => r.status === 'changes_requested')
+            if (!reviewStatus?.has_reviews) {
+              return (
+                <button className={styles.submitBtn} onClick={() => handleSubmitClick('submit')} title="Submit for Review">
+                  <Send size={13} /> Submit for Review
+                </button>
+              )
+            }
+            return (
+              <div style={{ display: 'flex', gap: 6 }}>
+                {hasChangesRequested && (
+                  <button className={styles.submitBtn} onClick={() => handleSubmitClick('revise')} title="Submit revised version">
+                    <Send size={13} /> Submit Revised Version
+                  </button>
+                )}
+                <button className={styles.addReviewerBtn} onClick={() => handleSubmitClick('add')} title="Add another reviewer">
+                  <Send size={13} /> Add Reviewer
+                </button>
+              </div>
+            )
+          })()}
           <button className={styles.exportBtn} onClick={handleExport} title="Export as Markdown">
             <Download size={13} /> Export
           </button>
-          {showReviewInbox && (
-            <button
-              className={styles.sidebarToggle}
-              onClick={() => setInboxOpen(o => !o)}
-              title={inboxOpen ? 'Hide review inbox' : 'Show review inbox'}
-              aria-label={inboxOpen ? 'Hide review inbox' : 'Show review inbox'}
-            >
-              {inboxOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
-            </button>
-          )}
         </div>
       </header>
 
@@ -645,10 +703,61 @@ export function HLDOutput({
               <p className={styles.placeholderSub}>Extracted business rules and acceptance criteria will appear here — coming soon.</p>
             </div>
           )}
+          {activeView === 'review' && effectiveSessionId && (
+            <div className={styles.reviewTabWrap}>
+              {/* Version selector bar — authors only, shown when there are multiple versions */}
+              {!reviewId && allVersions.length > 1 && (
+                <div className={styles.versionBar}>
+                  <span className={styles.versionBarLabel}>Viewing comments for:</span>
+                  <div className={styles.versionPills}>
+                    {[...allVersions].reverse().map(v => (
+                      <button
+                        key={v.version_id}
+                        className={`${styles.versionPill} ${(selectedReviewVersionId ?? versionId) === v.version_id ? styles.versionPillActive : ''}`}
+                        onClick={async () => {
+                          setSelectedReviewVersionId(v.version_id)
+                          selectedReviewVersionIdRef.current = v.version_id
+                          if (effectiveSessionId) {
+                            const feedback = await getSessionFeedback(effectiveSessionId, v.version_id)
+                            setComments(feedback.comments || [])
+                          }
+                        }}
+                      >
+                        v{v.version_number}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <ReviewCommunicationPanel
+                sessionId={effectiveSessionId}
+                versionId={versionId}
+                reviewId={reviewId}
+                reviewStatus={reviewStatus}
+                inlineComments={comments}
+                onNewComment={() => {
+                  if (reviewId) {
+                    getReview(reviewId).then(data => setComments(data.comments || []))
+                  }
+                }}
+                onReviewDecision={() => {
+                  showToast('Review submitted successfully', 'success')
+                  navigate('/dashboard')
+                }}
+              />
+            </div>
+          )}
+          {activeView === 'review' && !effectiveSessionId && (
+            <div className={styles.placeholderPanel}>
+              <div className={styles.placeholderIcon}><Inbox size={32} /></div>
+              <h3 className={styles.placeholderTitle}>Review Discussion</h3>
+              <p className={styles.placeholderSub}>Submit this document for review to start a discussion.</p>
+            </div>
+          )}
         </main>
 
-        {/* ── Right: chat drawer — hidden on diagram tab ── */}
-        {chatMode && activeView !== 'diagram' && (
+        {/* ── Right: chat drawer — hidden on diagram and review tabs ── */}
+        {chatMode && activeView !== 'diagram' && activeView !== 'review' && (
           <aside className={styles.chatDrawer} aria-label="AI Chat">
             <div className={styles.chatDrawerHeader}>
               <span className={styles.chatDrawerTitle}>
@@ -659,54 +768,30 @@ export function HLDOutput({
               </button>
             </div>
             <div className={styles.chatDrawerBody}>
-              <ChatPanel hld={hld} sessionId={sessionId} onEdit={handleChatEdit} />
+              <ChatPanel hld={hld} sessionId={effectiveSessionId} onEdit={handleChatEdit} />
             </div>
           </aside>
         )}
 
       </div>
 
-      {/* RIGHT — Review Inbox (collapsible, only when reviews exist) */}
-      {showReviewInbox && effectiveSessionId && (
-        <aside className={`${styles.inboxCol} ${!inboxOpen ? styles.inboxColCollapsed : ''}`} aria-label="Review inbox">
-          {inboxOpen && (
-            <ReviewCommunicationPanel
-              sessionId={effectiveSessionId}
-              versionId={versionId}
-              reviewId={reviewId}
-              onNewComment={() => {
-                // Reload feedback after new comment
-                if (reviewId) {
-                  getReview(reviewId).then(data => setComments(data.comments || []))
-                }
-              }}
-            />
-          )}
-        </aside>
-      )}
-
       {/* Submit for Review Modal */}
       {showSubmitModal && (
         <SubmitForReviewModal
           hld={hld}
-          sessionId={sessionId}
+          sessionId={effectiveSessionId}
+          mode={submitModalMode}
+          existingReviewerIds={reviewStatus?.reviewers?.map(r => r.id) ?? []}
           onClose={() => setShowSubmitModal(false)}
           onSuccess={() => {
-            // Modal will show success toast
+            if (effectiveSessionId) {
+              getSessionReviewStatus(effectiveSessionId).then(setReviewStatus).catch(() => {})
+            }
           }}
         />
       )}
 
-      {/* Review Actions - only for reviewers in review mode with pending status */}
-      {isReviewMode && user?.role === 'reviewer' && reviewId && currentReviewData?.status === 'pending' && (
-        <ReviewActions
-          reviewId={reviewId}
-          onSuccess={() => {
-            showToast('Review submitted successfully', 'success')
-            navigate('/dashboard')
-          }}
-        />
-      )}
+      {/* Review Actions are now inside the Review tab (ReviewCommunicationPanel) */}
     </div>
   )
 }

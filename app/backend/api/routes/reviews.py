@@ -47,18 +47,21 @@ class ReviewSummary(BaseModel):
 class CommentCreate(BaseModel):
     section: str  # "document", "adr_1", "diagram"
     content: str
-    parent_id: Optional[str] = None  # For threaded replies
+    parent_id: Optional[str] = None
+    quoted_text: Optional[str] = None  # Selected text for inline comments
 
 
 class CommentResponse(BaseModel):
     id: str
     reviewer_id: str
     reviewer_name: str
+    author_name: str
     section: str
     content: str
     created_at: str
     resolved: bool
     replies: list['CommentResponse'] = []
+    quoted_text: Optional[str] = None
 
 
 class ReviewActionRequest(BaseModel):
@@ -466,15 +469,16 @@ async def get_session_feedback(
     Get all feedback (comments and review statuses) for a session.
     If version_id is provided, only returns feedback for that specific version.
     """
-    # Build query
-    query = ReviewRequestDocument.session_id == session_id
-
-    # If version_id specified, filter by it to get ONLY that version's reviews
-    if version_id:
-        query = query & (ReviewRequestDocument.version_id == version_id)
-
     # Get reviews
-    reviews = await ReviewRequestDocument.find(query).to_list()
+    if version_id:
+        reviews = await ReviewRequestDocument.find(
+            ReviewRequestDocument.session_id == session_id,
+            ReviewRequestDocument.version_id == version_id
+        ).to_list()
+    else:
+        reviews = await ReviewRequestDocument.find(
+            ReviewRequestDocument.session_id == session_id
+        ).to_list()
 
     if not reviews:
         return {"comments": [], "reviews": []}
@@ -501,7 +505,9 @@ async def get_session_feedback(
                 "id": comment.id,
                 "reviewer_id": comment.reviewer_id,
                 "reviewer_name": commenter.name if commenter else "Unknown",
+                "author_name": commenter.name if commenter else "Unknown",
                 "section": comment.section,
+                "quoted_text": comment.quoted_text,
                 "content": comment.content,
                 "created_at": comment.created_at.isoformat(),
                 "resolved": comment.resolved,
@@ -567,14 +573,17 @@ async def get_review(
 
     for comment in comments:
         comment_reviewer = await UserDocument.find_one(UserDocument.id == comment.reviewer_id)
+        display_name = comment_reviewer.name if comment_reviewer else "Unknown"
         comment_resp = CommentResponse(
             id=comment.id,
             reviewer_id=comment.reviewer_id,
-            reviewer_name=comment_reviewer.name if comment_reviewer else "Unknown",
+            reviewer_name=display_name,
+            author_name=display_name,
             section=comment.section,
             content=comment.content,
             created_at=comment.created_at.isoformat(),
             resolved=comment.resolved,
+            quoted_text=comment.quoted_text,
             replies=[]
         )
         comment_map[comment.id] = comment_resp
@@ -629,10 +638,11 @@ async def add_comment(
 
     comment = CommentDocument(
         review_request_id=review_id,
-        reviewer_id=current_user.id,  # Store commenter's ID (can be author or reviewer)
+        reviewer_id=current_user.id,
         section=body.section,
         content=body.content,
         parent_id=body.parent_id,
+        quoted_text=body.quoted_text,
     )
     await comment.insert()
 
@@ -640,10 +650,12 @@ async def add_comment(
         id=comment.id,
         reviewer_id=comment.reviewer_id,
         reviewer_name=current_user.name,
+        author_name=current_user.name,
         section=comment.section,
         content=comment.content,
         created_at=comment.created_at.isoformat(),
         resolved=comment.resolved,
+        quoted_text=comment.quoted_text,
         replies=[]
     )
 

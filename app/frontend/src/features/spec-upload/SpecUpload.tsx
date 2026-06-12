@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   UploadCloud, AlertCircle, Trash2, ArrowRight, X,
-  Layers, FileSearch, MessagesSquare, ChevronDown, Plus, FolderOpen, Zap,
+  Layers, FileSearch, ChevronDown, Plus, FolderOpen, Zap,
 } from 'lucide-react'
 import { listSessions, loadSession, deleteSession, uploadSpecFiles } from '@/api/client'
 import { useToast } from '@/components/Toast/ToastContext'
@@ -40,12 +40,6 @@ const FEATURES = [
     name: 'Weeks of expert work, in one sitting',
     desc: 'What takes a specialist weeks to produce, delivered in a single session — and regenerated in minutes when requirements change.',
     color: 'amber' as const,
-  },
-  {
-    icon: <MessagesSquare size={20} />,
-    name: 'Decisions made before a word is written',
-    desc: 'A targeted interview closes every gap your requirements leave open. Every section reflects your explicit choices — not the AI\'s best guess.',
-    color: 'purple' as const,
   },
   {
     icon: <FileSearch size={20} />,
@@ -291,6 +285,18 @@ export function SpecUpload({ onReady, onLoadSession, currentProjectName, hasSpec
           </div>
         )}
 
+        {/* ══════════ PAGE HERO — full-width above the grid ══════════ */}
+        <div className={styles.pageHero}>
+          <span className={styles.centerHeroBadge}>From requirements to Enriched Requirements Document</span>
+          <h1 className={styles.centerHeroHeadline}>
+            From requirements to sign-off.{' '}
+            <span className={styles.centerHeroAccent}>In minutes, not weeks.</span>
+          </h1>
+          <p className={styles.centerHeroTagline}>
+            It reads your requirements, asks what's missing, and writes the full design — every decision backed by evidence.
+          </p>
+        </div>
+
         {/* ══════════ LEFT — product value ══════════ */}
         <aside className={styles.left}>
 
@@ -308,24 +314,90 @@ export function SpecUpload({ onReady, onLoadSession, currentProjectName, hasSpec
           </div>
         </aside>
 
-        {/* ══════════ CENTER — hero headline + upload ══════════ */}
+        {/* ══════════ CENTER — upload ══════════ */}
         <div className={styles.center}>
 
-          {/* Brand copy centered at the top */}
-          <div className={styles.centerHero}>
-            <span className={styles.centerHeroBadge}>From requirements to Enriched Requirements Document</span>
-            <h1 className={styles.centerHeroHeadline}>
-              From requirements to sign-off.{' '}
-              <span className={styles.centerHeroAccent}>In minutes, not weeks.</span>
-            </h1>
-            <p className={styles.centerHeroTagline}>
-              It reads your requirements, asks what's missing, and writes the full design —
-              every decision backed by evidence.
-            </p>
+          {/* ── Unified upload card ── */}
+          <div
+            className={`${styles.uploadCard} ${state === 'dragging' ? styles.uploadCardDragging : ''}`}
+            onDragOver={(e: React.DragEvent) => { e.preventDefault(); setState('dragging') }}
+            onDragLeave={() => setState('idle')}
+            onDrop={onDrop}
+          >
+            {/* Card header */}
+            <div className={styles.uploadCardHeader}>
+              <div>
+                <span className={styles.uploadCardTitle}>Requirements</span>
+                <span className={styles.uploadCardSub}>PDF, DOCX, Markdown, or plain text</span>
+              </div>
+              {selectedFiles.length > 0 && (
+                <span className={styles.uploadCardCount}>{selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''}</span>
+              )}
+            </div>
+
+            {/* File rows (when files are added) */}
+            {(selectedFiles.length > 0 || (hasSpec && selectedFiles.length === 0)) && (
+              <div className={styles.uploadFileRows}>
+                {hasSpec && selectedFiles.length === 0 ? (
+                  <div className={styles.uploadFileRow}>
+                    <span className={`${styles.fileExt} ${styles.fileExtMD}`}>DOC</span>
+                    <div className={styles.fileInfo}>
+                      <span className={styles.fileName}>Requirements document loaded</span>
+                      <span className={styles.fileMeta}>Previously uploaded</span>
+                    </div>
+                  </div>
+                ) : selectedFiles.map((fileItem: FileWithPreview) => {
+                  const ext = fileItem.file.name.split('.').pop()?.toLowerCase() ?? ''
+                  const extClass = ext === 'md' ? styles.fileExtMD : ext === 'pdf' ? styles.fileExtPDF : ext === 'txt' ? styles.fileExtTXT : ext === 'docx' ? styles.fileExtDOCX : styles.fileExtDefault
+                  const sizeKb = fileItem.file.size / 1024
+                  const sizeStr = sizeKb >= 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb.toFixed(1)} KB`
+                  return (
+                    <div key={fileItem.id} className={styles.uploadFileRow}>
+                      <span className={`${styles.fileExt} ${extClass}`}>{ext.toUpperCase()}</span>
+                      <div className={styles.fileInfo}>
+                        <span className={styles.fileName}>{fileItem.file.name}</span>
+                        <span className={styles.fileMeta}>{sizeStr}</span>
+                      </div>
+                      <button className={styles.fileRemove} onClick={(e: React.MouseEvent) => { e.stopPropagation(); removeFile(fileItem.id) }} title="Remove">
+                        <X size={12} />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Drop area / add more */}
+            {state === 'uploading' ? (
+              <div className={styles.uploadDropArea}>
+                <span className={styles.readingSpinner} />
+                <span className={styles.uploadDropLabel}>Uploading and parsing…</span>
+              </div>
+            ) : selectedFiles.length > 0 ? (
+              <label htmlFor="spec-file-more" className={styles.uploadAddMore}>
+                <Plus size={14} />
+                Add more files
+                <input id="spec-file-more" type="file" accept=".txt,.md,.docx,.pdf" multiple className={styles.hiddenInput} onChange={onInputChange} />
+              </label>
+            ) : (
+              <label htmlFor="spec-file" className={styles.uploadDropArea}>
+                <div className={styles.uploadIconWrap}><UploadCloud size={20} strokeWidth={1.5} /></div>
+                <span className={styles.uploadDropLabel}>Drop your file here</span>
+                <span className={styles.uploadDropSub}>or</span>
+                <span className={styles.browseBtn}>Browse files</span>
+                <input id="spec-file" type="file" accept=".txt,.md,.docx,.pdf" multiple className={styles.hiddenInput} onChange={onInputChange} />
+              </label>
+            )}
+
+            {state === 'error' && (
+              <div className={styles.errorBanner} role="alert">
+                <AlertCircle size={15} /><span>{errorMsg}</span>
+              </div>
+            )}
           </div>
 
-
-          {/* Track selector */}
+          {/* Track selector — below upload card */}
+          <div className={styles.trackSelectorLabel}>Output type</div>
           <div className={styles.trackSelector} role="radiogroup" aria-label="Document track">
             {([
               { id: 'technical' as Track, name: 'Technical', sub: 'Architecture & engineering output' },
@@ -346,100 +418,11 @@ export function SpecUpload({ onReady, onLoadSession, currentProjectName, hasSpec
             ))}
           </div>
 
-          {state === 'error' && (
-            <div className={styles.errorBanner} role="alert">
-              <AlertCircle size={15} />
-              <span>{errorMsg}</span>
-            </div>
-          )}
-
-          {state === 'uploading' ? (
-            <div className={styles.reading}>
-              <span className={styles.readingSpinner} />
-              <span>Uploading and parsing documents…</span>
-            </div>
-          ) : hasSpec && selectedFiles.length === 0 ? (
-            <div className={styles.specLoadedBanner}>
-              <div className={styles.specLoadedIcon}><FolderOpen size={18} /></div>
-              <div className={styles.specLoadedText}>
-                <span className={styles.specLoadedTitle}>Requirements document loaded</span>
-                <span className={styles.specLoadedSub}>Drop or browse to replace with a different document</span>
-              </div>
-              <label htmlFor="spec-file-replace" className={styles.specLoadedReplace}>Replace</label>
-              <input
-                id="spec-file-replace"
-                type="file"
-                accept=".txt,.md,.docx,.pdf"
-                multiple
-                className={styles.hiddenInput}
-                onChange={onInputChange}
-              />
-            </div>
-          ) : (
-            <label
-              htmlFor="spec-file"
-              className={`${styles.dropzone} ${state === 'dragging' ? styles.dragging : ''}`}
-              onDragOver={(e: React.DragEvent) => { e.preventDefault(); setState('dragging') }}
-              onDragLeave={() => setState('idle')}
-              onDrop={onDrop}
-            >
-              <div className={styles.uploadIconWrap}>
-                <UploadCloud size={22} strokeWidth={1.5} />
-              </div>
-              <p className={styles.dropLabel}>Drop your requirements document</p>
-              <p className={styles.dropSub}>PDF, DOCX, Markdown, or plain text · multiple files supported</p>
-              <span className={styles.browseBtn}>Browse files</span>
-              <input
-                id="spec-file"
-                type="file"
-                accept=".txt,.md,.docx,.pdf"
-                multiple
-                className={styles.hiddenInput}
-                onChange={onInputChange}
-              />
-            </label>
-          )}
-
+          {/* Analyse button */}
           {selectedFiles.length > 0 && (
-            <div className={styles.filesCard}>
-              <div className={styles.filesHeader}>
-                <span className={styles.filesHeaderLabel}>
-                  {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} prepared
-                </span>
-                <div className={styles.filesHeaderDots}>
-                  <span /><span /><span />
-                </div>
-              </div>
-              <div className={styles.filesList}>
-                {selectedFiles.map((fileItem: FileWithPreview) => {
-                  const ext = fileItem.file.name.split('.').pop()?.toLowerCase() ?? ''
-                  const extClass = ext === 'md' ? styles.fileExtMD
-                    : ext === 'pdf'  ? styles.fileExtPDF
-                    : ext === 'txt'  ? styles.fileExtTXT
-                    : ext === 'docx' ? styles.fileExtDOCX
-                    : styles.fileExtDefault
-                  const sizeKb = fileItem.file.size / 1024
-                  const sizeStr = sizeKb >= 1024
-                    ? `${(sizeKb / 1024).toFixed(1)} MB`
-                    : `${sizeKb.toFixed(1)} KB`
-                  return (
-                    <div key={fileItem.id} className={styles.fileItem}>
-                      <span className={`${styles.fileExt} ${extClass}`}>{ext.toUpperCase()}</span>
-                      <div className={styles.fileInfo}>
-                        <span className={styles.fileName}>{fileItem.file.name}</span>
-                        <span className={styles.fileMeta}>{sizeStr} · Just added</span>
-                      </div>
-                      <button className={styles.fileRemove} onClick={(e: React.MouseEvent) => { e.stopPropagation(); removeFile(fileItem.id) }} title="Remove" aria-label={`Remove ${fileItem.file.name}`}>
-                        <X size={11} />
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-              <button className={styles.uploadBtn} onClick={handleUpload} disabled={state === 'uploading'}>
-                {state === 'uploading' ? 'Uploading…' : 'Analyse requirements →'}
-              </button>
-            </div>
+            <button className={styles.uploadBtn} onClick={handleUpload} disabled={state === 'uploading'}>
+              {state === 'uploading' ? 'Uploading…' : 'Analyse requirements →'}
+            </button>
           )}
         </div>
 

@@ -29,6 +29,7 @@
     "react-markdown": "10.1.0",
     "react-router-dom": "^6.24.0",
     "react-zoom-pan-pinch": "4.0.3",
+    "rehype-raw": "7.0.0",
     "remark-gfm": "4.0.1",
     "turndown": "7.2.4",
     "turndown-plugin-gfm": "1.0.2",

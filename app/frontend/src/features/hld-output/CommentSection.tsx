@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { MessageSquarePlus } from 'lucide-react'
-import { Button } from '@/components/Button'
+import { MessageSquare, User, X } from 'lucide-react'
 import { useToast } from '@/components/Toast/ToastContext'
 import { addComment } from '@/api/client'
 import type { Comment } from '@/types'
@@ -46,25 +45,18 @@ export function CommentSection({ reviewId, sectionKey, comments, onCommentAdded,
 
   return (
     <div className={styles.container}>
-      {/* Existing comments */}
+      {/* Existing section comments */}
       {sectionComments.length > 0 && (
         <div className={styles.commentList}>
           {sectionComments.map((comment: any) => (
             <div key={comment.id} className={styles.comment}>
               <div className={styles.commentHeader}>
-                <div className={styles.authorInfo}>
-                  <span className={styles.author}>👤 {comment.reviewer_name}</span>
-                  {comment.review_status && (
-                    <span className={styles.reviewStatus} data-status={comment.review_status}>
-                      {comment.review_status === 'approved' && '✅ Approved'}
-                      {comment.review_status === 'rejected' && '❌ Rejected'}
-                      {comment.review_status === 'changes_requested' && '🔄 Changes Requested'}
-                      {comment.review_status === 'pending' && '⏳ Pending'}
-                    </span>
-                  )}
-                </div>
+                <span className={styles.commentAvatar}>
+                  <User size={11} />
+                </span>
+                <span className={styles.author}>{comment.reviewer_name}</span>
                 <span className={styles.date}>
-                  {new Date(comment.created_at).toLocaleDateString()}
+                  {new Date(comment.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
                 </span>
               </div>
               <div className={styles.commentContent}>{comment.content}</div>
@@ -73,46 +65,37 @@ export function CommentSection({ reviewId, sectionKey, comments, onCommentAdded,
         </div>
       )}
 
-      {/* Add comment button/input */}
+      {/* GitHub-style: comment trigger appears on section hover, expands inline */}
       {canComment && (
         <div className={styles.addCommentSection}>
           {!showInput ? (
-            <button
-              className={styles.addButton}
-              onClick={() => setShowInput(true)}
-            >
-              <MessageSquarePlus size={14} />
-              Add comment
+            <button className={styles.addButton} onClick={() => setShowInput(true)}>
+              <MessageSquare size={13} />
+              {sectionComments.length > 0 ? 'Reply' : 'Comment on this section'}
             </button>
           ) : (
             <div className={styles.inputBox}>
+              <div className={styles.inputBoxHeader}>
+                <span className={styles.inputBoxTitle}>Comment on section</span>
+                <button className={styles.inputCloseBtn} onClick={() => { setShowInput(false); setCommentText('') }}>
+                  <X size={13} />
+                </button>
+              </div>
               <textarea
                 className={styles.textarea}
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Add your comment..."
+                placeholder="Leave a comment on this section..."
                 rows={3}
                 autoFocus
               />
               <div className={styles.actions}>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setShowInput(false)
-                    setCommentText('')
-                  }}
-                  disabled={submitting}
-                >
+                <button className={styles.cancelBtn} onClick={() => { setShowInput(false); setCommentText('') }} disabled={submitting}>
                   Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSubmit}
-                  disabled={submitting || !commentText.trim()}
-                >
-                  {submitting ? 'Adding...' : 'Add Comment'}
-                </Button>
+                </button>
+                <button className={styles.submitBtn} onClick={handleSubmit} disabled={submitting || !commentText.trim()}>
+                  {submitting ? 'Saving...' : 'Save comment'}
+                </button>
               </div>
             </div>
           )}

@@ -289,9 +289,11 @@ export async function uploadSpecFiles(files: File[]): Promise<UploadSessionRespo
     formData.append('files', file)
   })
 
+  const token = getToken()
   const res = await fetch(`${BASE}/sessions/upload`, {
     method: 'POST',
     body: formData,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
 
   if (!res.ok) {
@@ -624,10 +626,10 @@ export function getSessionFeedback(sessionId: string, versionId?: string): Promi
   return request(url)
 }
 
-export function addComment(reviewId: string, section: string, content: string, parentId?: string): Promise<import('@/types').Comment> {
+export function addComment(reviewId: string, section: string, content: string, parentId?: string, quotedText?: string): Promise<import('@/types').Comment> {
   return request(`/reviews/${reviewId}/comments`, {
     method: 'POST',
-    body: JSON.stringify({ section, content, parent_id: parentId })
+    body: JSON.stringify({ section, content, parent_id: parentId, quoted_text: quotedText })
   })
 }
 

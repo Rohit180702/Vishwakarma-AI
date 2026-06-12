@@ -1,34 +1,39 @@
 .container {
   display: flex;
-  gap: var(--space-3);
-  align-items: center;
-  padding: var(--space-4);
-  background: var(--color-surface);
-  border-top: 1px solid var(--color-border);
-}
-
-.approveBtn {
-  background: #10b981;
-  color: white;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  padding: 0;
+  background: transparent;
   border: none;
 }
 
-.approveBtn:hover {
-  background: #059669;
+.approveBtn {
+  background: #10b981 !important;
+  color: white !important;
+  border: none !important;
+  width: 100%;
+  justify-content: center;
 }
+.approveBtn:hover:not(:disabled) { background: #059669 !important; }
 
 .changesBtn {
-  color: var(--color-text);
+  width: 100%;
+  justify-content: center;
+  color: #4f46e5 !important;
+  border-color: #c7d2fe !important;
+  background: #eef2ff !important;
 }
+.changesBtn:hover:not(:disabled) { background: #e0e7ff !important; }
 
 .rejectBtn {
-  color: #dc2626;
+  width: 100%;
+  justify-content: center;
+  color: #dc2626 !important;
+  border-color: #fca5a5 !important;
+  background: #fff5f5 !important;
 }
-
-.rejectBtn:hover {
-  background: #fef2f2;
-  color: #b91c1c;
-}
+.rejectBtn:hover:not(:disabled) { background: #fef2f2 !important; }
 
 .commentBox {
   padding: var(--space-4);

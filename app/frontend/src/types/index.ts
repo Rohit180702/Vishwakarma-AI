@@ -149,11 +149,13 @@ export interface Comment {
   id: string
   reviewer_id: string
   reviewer_name: string
+  author_name: string
   section: string
   content: string
   created_at: string
   resolved: boolean
   replies: Comment[]
+  quoted_text?: string | null
 }
 
 export interface ReviewDetail {

@@ -4,18 +4,33 @@
 /* ─── Page grid ──────────────────────────────────────────────────────────── */
 .page {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 6fr) minmax(0, 3fr);
-  grid-template-rows: 1fr;
-  gap: 32px;
-  padding: 64px 32px 32px;
+  grid-template-rows: auto auto;
+  align-items: start;
+  column-gap: 32px;
+  row-gap: 24px;
+  padding: 40px 32px 64px;
   max-width: 1536px;
   margin: 0 auto;
   width: 100%;
-  min-height: 0;
-  overflow: auto;
   background: transparent;
+}
+
+
+/* Hero spans all 3 columns */
+.pageHero {
+  grid-column: 1 / -1;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border);
 }
 
 /* ─── Project picker — floating top-right overlay ────────────────────────── */
@@ -153,13 +168,12 @@
    Reference: aside has NO top padding — content starts at top of main
    ══════════════════════════════════════════════ */
 .left {
-  grid-row: 1;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  padding-top: 0;          /* reference: no pt-X on left aside */
+  padding-top: 16px;
   padding-bottom: 32px;
-  overflow-y: auto;
   background: transparent;
 }
 
@@ -170,39 +184,39 @@
   text-transform: uppercase;
   letter-spacing: 0.18em;
   color: var(--color-primary);
-  margin-top: 0;       /* row-gap from page provides separation from topBar */
-  margin-bottom: 16px; /* mb-4 = 16px before first card */
-  padding-left: 4px;
+  margin-top: 0;
+  margin-bottom: 12px;
+  padding-left: 2px;
 }
 
-/* four purpose cards — tight enough that all stay in view */
-.features { display: flex; flex-direction: column; gap: 12px; }
+.features { display: flex; flex-direction: column; gap: 14px; }
 
-/* glass-card rounded-2xl — compacted so four purpose cards fit above the fold */
 .featureCard {
-  padding: 14px 16px;
-  border-radius: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(0, 0, 0, 0.05);
-  box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 12px -1px rgba(0, 0, 0, 0.04);
   cursor: default;
-  transition: border-color 0.5s, box-shadow 0.3s;
+  transition: border-color 0.3s, box-shadow 0.2s;
 }
-.featureCard_indigo:hover  { border-color: rgba(99,102,241,0.5); }
-.featureCard_purple:hover  { border-color: rgba(139,92,246,0.5); }
-.featureCard_emerald:hover { border-color: rgba(16,185,129,0.5); }
-.featureCard_amber:hover   { border-color: rgba(245,158,11,0.5); }
+.featureCard_indigo:hover  { border-color: rgba(99,102,241,0.4); }
+.featureCard_purple:hover  { border-color: rgba(139,92,246,0.4); }
+.featureCard_emerald:hover { border-color: rgba(16,185,129,0.4); }
+.featureCard_amber:hover   { border-color: rgba(245,158,11,0.4); }
 
-/* compact 38px icon box */
 .featureIconWrap {
   width: 38px; height: 38px; border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
-  margin-bottom: 8px; flex-shrink: 0;
-  transition: background 0.3s, color 0.3s;
+  flex-shrink: 0;
+  margin-bottom: 0;
+  transition: background 0.2s, color 0.2s;
 }
-/* bg-indigo-100 text-indigo-600 → hover: bg-indigo-600 text-white */
 .featureIconWrap_indigo  { background: #e0e7ff; color: var(--color-primary-hover); }
 .featureIconWrap_purple  { background: #ede9fe; color: #7c3aed; }
 .featureIconWrap_emerald { background: #d1fae5; color: #059669; }
@@ -213,23 +227,20 @@
 .featureCard:hover .featureIconWrap_emerald { background: #059669; color: #fff; }
 .featureCard:hover .featureIconWrap_amber   { background: #d97706; color: #fff; }
 
-.featureText { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
-/* font-bold text-slate-900 */
-.featureName { font-size: 14px; font-weight: 700; color: var(--color-text); }
-/* text-xs text-slate-500 leading-relaxed */
-.featureDesc { font-size: 11px; color: var(--color-text-muted); line-height: 1.5; }
+.featureText { display: flex; flex-direction: column; gap: 4px; margin-top: 0; }
+.featureName { font-size: 15px; font-weight: 700; color: var(--color-text); }
+.featureDesc { font-size: 13px; color: var(--color-text-muted); line-height: 1.5; }
 /* ══════════════════════════════════════════════
    CENTER  col-span-6  flex-col items-center
    ══════════════════════════════════════════════ */
 .center {
-  grid-row: 1;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   align-items: center;
-  padding: var(--space-8) 0 var(--space-8);
-  gap: 12px;
-  overflow-y: auto;
+  padding: 16px 24px var(--space-8);
+  gap: 20px;
   background: transparent;
 }
 
@@ -242,31 +253,26 @@
 
 
 
-/* text-center space-y-4 — reduced bottom margin to keep files in view */
-.centerHero {
-  text-align: center;
-  display: flex; flex-direction: column; gap: 12px;
-  max-width: 540px; width: 100%;
-  margin-bottom: 8px;
-}
+/* centerHero kept for backward compat but unused — hero lives in .pageHero now */
+.centerHero { display: none; }
 
 .centerHeroBadge {
-  display: inline-flex; align-items: center; align-self: center;
+  display: inline-flex; align-items: center;
   gap: 6px;
-  padding: 6px 16px;
+  padding: 4px 14px;
   background: linear-gradient(135deg, var(--color-primary-light), #ede9fe);
   border: 1px solid var(--color-primary-subtle);
   border-radius: 999px;
-  font-size: 11px; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase;
   color: var(--color-primary-hover);
-  box-shadow: 0 1px 4px rgba(99,102,241,0.12);
 }
 
 .centerHeroHeadline {
-  font-size: clamp(26px, 3vw, 40px);
+  font-size: clamp(28px, 3.2vw, 42px);
   font-weight: 800;
   letter-spacing: -0.03em;
-  line-height: 1.15;
+  line-height: 1.1;
+  white-space: nowrap;
   color: var(--color-text);
   margin: 0;
 }
@@ -276,30 +282,169 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  white-space: nowrap;  /* keep "We extract it." together — no orphaned words */
 }
 
 .centerHeroTagline {
-  font-size: 14px; line-height: 1.75; color: var(--color-text-secondary); margin: 0;
+  font-size: 14px; line-height: 1.6; color: var(--color-text-secondary); margin: 0;
   font-weight: 400;
-  max-width: 420px; align-self: center; text-align: center;
+}
+
+
+/* ── Unified upload card ─────────────────────────────────────────────────── */
+.uploadCard {
+  max-width: 540px;
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  transition: border-color 0.2s;
+}
+
+.uploadCardDragging {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+}
+
+.uploadCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.uploadCardTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+  display: block;
+}
+
+.uploadCardSub {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  display: block;
+  margin-top: 1px;
+}
+
+.uploadCardCount {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  background: var(--color-primary-light);
+  color: var(--color-primary-deep);
+  border-radius: 999px;
+  border: 1px solid var(--color-primary-subtle);
+}
+
+/* File rows inside the card */
+.uploadFileRows {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 14px;
+  gap: 8px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+}
+
+.uploadFileRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+
+/* Drop area (empty state or uploading) */
+.uploadDropArea {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 24px;
+  cursor: pointer;
+  text-align: center;
+  border: 2px dashed var(--color-border);
+  border-radius: 12px;
+  margin: 12px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.uploadDropArea:hover {
+  border-color: var(--color-primary-subtle);
+  background: var(--color-primary-light);
+}
+
+.uploadCardDragging .uploadDropArea {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.uploadDropLabel {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.uploadDropSub {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* "Add more files" button inside the card */
+.uploadAddMore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  transition: background 0.1s;
+  font-family: var(--font-ui);
+  border-top: 1px dashed var(--color-primary-subtle);
+}
+
+.uploadAddMore:hover {
+  background: var(--color-primary-light);
+}
+
+/* Track selector label */
+.trackSelectorLabel {
+  max-width: 540px;
+  width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-text-muted);
+  padding-left: 2px;
+  margin-top: -4px;
 }
 
 /* ── Track selector ─────────────────────────────────────────────────────── */
 .trackSelector {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 12px;
   max-width: 540px;
   width: 100%;
-  margin-bottom: 4px;
 }
 
 .trackCard {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 9px 12px;
+  gap: 4px;
+  padding: 14px 16px;
   background: rgba(255,255,255,0.7);
   backdrop-filter: blur(8px);
   border: 1.5px solid var(--color-border);
@@ -336,12 +481,12 @@
   border-radius: 999px;
 }
 .trackCardName {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--color-text);
 }
 .trackCardSub {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-muted);
   line-height: 1.4;
 }
@@ -404,16 +549,15 @@
   max-width: 540px; width: 100%;
 }
 
-/* glass-card border-dashed border-2 border-indigo-200 rounded-3xl — compact padding */
 .dropzone {
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
-  padding: 28px 32px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 18px 32px;
   max-width: 540px; width: 100%;
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 2px dashed var(--color-primary-subtle);
-  border-radius: 24px;
+  border-radius: 20px;
   cursor: pointer; text-align: center;
   box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.04);
   transition: background 0.2s, border-color 0.2s;
@@ -423,9 +567,8 @@
   border-color: #818cf8;
 }
 
-/* upload icon — compact at 52px */
 .uploadIconWrap {
-  width: 52px; height: 52px; border-radius: 50%;
+  width: 40px; height: 40px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   background: var(--color-primary-light);
   color: var(--color-primary);
@@ -437,9 +580,8 @@
 .dropLabel  { font-size: 17px; font-weight: 800; color: var(--color-text); margin: 0; letter-spacing: -0.02em; }
 /* text-sm text-slate-400 font-medium */
 .dropSub    { font-size: 13px; color: var(--color-text-muted); margin: 0; font-weight: 500; }
-/* mt-8 px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg */
 .browseBtn {
-  margin-top: 8px; padding: 12px 32px;
+  margin-top: 4px; padding: 10px 28px;
   background: var(--color-primary-hover); color: #fff;
   font-size: 14px; font-weight: 700; border-radius: 12px;
   box-shadow: 0 8px 20px -4px rgba(79,70,229,0.5);
@@ -526,24 +668,26 @@
 
 .fileRemove {
   display: flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; border-radius: 6px; border: none; background: transparent;
-  color: var(--color-text-muted); cursor: pointer; flex-shrink: 0; transition: color 0.12s, background 0.12s;
-  opacity: 0;
+  width: 24px; height: 24px; border-radius: 6px; border: none;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted); cursor: pointer; flex-shrink: 0;
+  transition: color 0.12s, background 0.12s;
 }
-.fileItem:hover .fileRemove { opacity: 1; }
-.fileRemove:hover { color: var(--color-danger); background: #fef2f2; }
+.fileRemove:hover { color: #dc2626; background: #fef2f2; }
 
-/* bg-gradient-to-r from-indigo-600 to-purple-600 */
 .uploadBtn {
-  width: 100%; padding: 18px 24px;
+  max-width: 540px;
+  width: 100%;
+  padding: 16px 24px;
   background: linear-gradient(to right, var(--color-primary-hover), #7c3aed);
   color: #fff; border: none; font-family: inherit;
   font-size: 15px; font-weight: 700; cursor: pointer;
-  transition: filter 0.12s;
+  border-radius: 12px;
+  transition: filter 0.12s, transform 0.1s;
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  box-shadow: 0 8px 24px -4px rgba(99,102,241,0.4);
+  box-shadow: 0 6px 20px -4px rgba(99,102,241,0.4);
 }
-.uploadBtn:hover:not(:disabled) { filter: brightness(1.1); }
+.uploadBtn:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
 .uploadBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ══════════════════════════════════════════════
@@ -551,16 +695,16 @@
    Starts at top with pt-12=48px, not vertically centered
    ══════════════════════════════════════════════ */
 .right {
-  grid-row: 1;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   gap: 0;
-  padding-top: var(--offset-sm);
+  padding-top: 16px;
   padding-bottom: var(--space-8);
-  overflow-y: auto;
   background: transparent;
 }
+
 
 /* glass-card rounded-3xl overflow-hidden relative */
 .howItWorksCard {

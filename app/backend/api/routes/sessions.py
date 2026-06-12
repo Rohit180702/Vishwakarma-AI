@@ -11,14 +11,33 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
+from typing import Optional as Opt
 
-from infrastructure.database import HLDSession
+from infrastructure.database import HLDSession, UserDocument
+from infrastructure.auth import decode_access_token
 from infrastructure.session_storage import get_storage
 from infrastructure.parser import DocumentParser
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+_bearer = HTTPBearer(auto_error=False)
+
+
+async def get_optional_user(
+    credentials: Opt[HTTPAuthorizationCredentials] = Depends(_bearer),
+) -> Opt[UserDocument]:
+    """Return the current user if a valid Bearer token is provided, else None."""
+    if not credentials:
+        return None
+    payload = decode_access_token(credentials.credentials)
+    if not payload:
+        return None
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+    return await UserDocument.find_one(UserDocument.id == user_id)
 
 
 # ---------------------------------------------------------------------------
@@ -84,8 +103,9 @@ class UploadSessionResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.get("", response_model=list[SessionSummary], summary="List all past sessions")
-async def list_sessions() -> list[SessionSummary]:
-    sessions = await HLDSession.find().sort(-HLDSession.created_at).to_list()
+async def list_sessions(current_user: Opt[UserDocument] = Depends(get_optional_user)) -> list[SessionSummary]:
+    query = HLDSession.find(HLDSession.author_id == current_user.id) if current_user else HLDSession.find()
+    sessions = await query.sort(-HLDSession.created_at).to_list()
     store = get_storage()
     result = []
     for s in sessions:
@@ -187,6 +207,7 @@ async def save_session(body: SaveSessionRequest) -> SessionSummary:
         project_name=session.project_name,
         template=session.template,
         created_at=session.created_at,
+        stage="generate",
     )
 
 
@@ -196,7 +217,10 @@ async def save_session(body: SaveSessionRequest) -> SessionSummary:
     status_code=status.HTTP_201_CREATED,
     summary="Upload and parse specification documents",
 )
-async def upload_documents(files: List[UploadFile] = File(...)) -> UploadSessionResponse:
+async def upload_documents(
+    files: List[UploadFile] = File(...),
+    current_user: Opt[UserDocument] = Depends(get_optional_user),
+) -> UploadSessionResponse:
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No files uploaded")
 
@@ -210,8 +234,11 @@ async def upload_documents(files: List[UploadFile] = File(...)) -> UploadSession
         session_id = str(uuid.uuid4())
         created_at = datetime.now(timezone.utc)
 
-        # Auto-number: "Project - 1", "Project - 2", …
-        project_count = await HLDSession.count()
+        # Auto-number per author: "Project - 1", "Project - 2", …
+        if current_user:
+            project_count = await HLDSession.find(HLDSession.author_id == current_user.id).count()
+        else:
+            project_count = await HLDSession.count()
         project_name = f"Project - {project_count + 1}"
 
         # Persist metadata in MongoDB
@@ -220,6 +247,7 @@ async def upload_documents(files: List[UploadFile] = File(...)) -> UploadSession
             project_name=project_name,
             template="",
             created_at=created_at,
+            author_id=current_user.id if current_user else None,
         )
         await hld_session.insert()
 

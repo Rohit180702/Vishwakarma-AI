@@ -50,8 +50,7 @@ export function LoginPage() {
 
   const toggleMode = () => {
     setMode(mode === 'login' ? 'register' : 'login')
-    // Clear form when switching modes
-    setEmail('')
+    // Keep email when switching so user doesn't have to retype
     setPassword('')
     setName('')
     setRole('author')

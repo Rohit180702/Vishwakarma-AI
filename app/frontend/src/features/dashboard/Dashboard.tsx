@@ -1,7 +1,11 @@
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+import { Plus, ArrowRight, Clock, CheckCircle, XCircle, RefreshCw, FileText, Layers } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { getPendingReviews, getMyCompletedReviews, getMySubmissions, getSessionVersions, type VersionHistory } from '@/api/client'
+import {
+  getPendingReviews, getMyCompletedReviews, getMySubmissions,
+  listSessions, type SessionSummary, getSessionVersions, type VersionHistory
+} from '@/api/client'
 import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/Button'
 import type { ReviewSummary } from '@/types'
@@ -16,312 +20,283 @@ interface CompletedReview {
   reviewed_at: string | null
 }
 
-interface SessionGroup {
-  projectName: string
-  submittedAt: string
-  versionNumber: number
-  reviews: ReviewSummary[]
+function statusInfo(status: string) {
+  switch (status) {
+    case 'approved':          return { label: 'Approved',          icon: CheckCircle, color: '#16a34a', bg: '#dcfce7' }
+    case 'rejected':          return { label: 'Rejected',          icon: XCircle,     color: '#dc2626', bg: '#fee2e2' }
+    case 'changes_requested': return { label: 'Changes Requested', icon: RefreshCw,   color: '#2563eb', bg: '#dbeafe' }
+    default:                  return { label: 'Pending',           icon: Clock,       color: '#d97706', bg: '#fef3c7' }
+  }
 }
 
-// Helper function to group submissions by session (latest version only)
-function groupSubmissionsBySession(submissions: ReviewSummary[]): Record<string, SessionGroup> {
-  const grouped: Record<string, SessionGroup> = {}
+function stageLabel(stage?: string, reviewStatus?: string) {
+  // Review status takes priority over generation stage
+  if (reviewStatus === 'changes_requested') return { label: 'Changes Requested', color: '#2563eb', bg: '#dbeafe' }
+  if (reviewStatus === 'approved')          return { label: 'Approved',          color: '#16a34a', bg: '#dcfce7' }
+  if (reviewStatus === 'rejected')          return { label: 'Rejected',          color: '#dc2626', bg: '#fee2e2' }
+  if (reviewStatus === 'pending')           return { label: 'Under Review',      color: '#7c3aed', bg: '#ede9fe' }
 
-  for (const submission of submissions) {
-    const sessionId = submission.session_id
-
-    if (!grouped[sessionId]) {
-      grouped[sessionId] = {
-        projectName: submission.project_name || 'Unnamed Project',
-        submittedAt: submission.submitted_at,
-        versionNumber: 1, // This will be updated if we track version numbers
-        reviews: []
-      }
-    }
-
-    grouped[sessionId].reviews.push(submission)
+  switch (stage) {
+    case 'hld_generated':       return { label: 'HLD Ready',     color: '#16a34a', bg: '#dcfce7' }
+    case 'interview_done':      return { label: 'Interview Done', color: '#2563eb', bg: '#dbeafe' }
+    case 'characteristics_done':return { label: 'In Progress',   color: '#7c3aed', bg: '#ede9fe' }
+    case 'spec_uploaded':       return { label: 'Uploaded',      color: '#d97706', bg: '#fef3c7' }
+    default:                    return { label: 'Draft',         color: '#6b7280', bg: '#f3f4f6' }
   }
-
-  return grouped
 }
 
 export function Dashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [pendingReviews, setPendingReviews] = useState<ReviewSummary[]>([])
+  const [sessions, setSessions]               = useState<SessionSummary[]>([])
+  const [pendingReviews, setPendingReviews]   = useState<ReviewSummary[]>([])
   const [completedReviews, setCompletedReviews] = useState<CompletedReview[]>([])
-  const [mySubmissions, setMySubmissions] = useState<ReviewSummary[]>([])
-  const [loading, setLoading] = useState(true)
+  const [mySubmissions, setMySubmissions]     = useState<ReviewSummary[]>([])
+  const [loading, setLoading]                 = useState(true)
   const [expandedSession, setExpandedSession] = useState<string | null>(null)
-  const [versionHistory, setVersionHistory] = useState<Record<string, VersionHistory[]>>({})
+  const [versionHistory, setVersionHistory]   = useState<Record<string, VersionHistory[]>>({})
   const [loadingVersions, setLoadingVersions] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
-    async function loadData() {
-      if (user?.role === 'reviewer') {
-        try {
-          const [pending, completed] = await Promise.all([
-            getPendingReviews(),
-            getMyCompletedReviews()
-          ])
+    async function load() {
+      try {
+        if (user?.role === 'reviewer') {
+          const [pending, completed] = await Promise.all([getPendingReviews(), getMyCompletedReviews()])
           setPendingReviews(pending)
           setCompletedReviews(completed)
-        } catch (error) {
-          console.error('Failed to load reviews:', error)
-        } finally {
-          setLoading(false)
+        } else if (user?.role === 'author') {
+          const [subs, sess] = await Promise.all([getMySubmissions(), listSessions()])
+          setMySubmissions(subs)
+          setSessions(sess)
         }
-      } else if (user?.role === 'author') {
-        try {
-          const submissions = await getMySubmissions()
-          setMySubmissions(submissions)
-        } catch (error) {
-          console.error('Failed to load submissions:', error)
-        } finally {
-          setLoading(false)
-        }
-      } else {
+      } catch (e) {
+        console.error('Dashboard load failed:', e)
+      } finally {
         setLoading(false)
       }
     }
-    loadData()
+    load()
   }, [user])
 
-  const handleLogout = async () => {
-    await logout()
-    navigate('/login')
-  }
-
-  const handleStartNewHLD = () => {
-    navigate('/')
-  }
+  const handleLogout = async () => { await logout(); navigate('/login') }
 
   const handleToggleVersions = async (sessionId: string) => {
-    if (expandedSession === sessionId) {
-      setExpandedSession(null)
-      return
-    }
-
+    if (expandedSession === sessionId) { setExpandedSession(null); return }
     setExpandedSession(sessionId)
-
-    // Load versions if not already loaded
     if (!versionHistory[sessionId]) {
       setLoadingVersions(prev => ({ ...prev, [sessionId]: true }))
       try {
         const versions = await getSessionVersions(sessionId)
         setVersionHistory(prev => ({ ...prev, [sessionId]: versions }))
-      } catch (error) {
-        console.error('Failed to load version history:', error)
-      } finally {
+      } catch { /* ignore */ } finally {
         setLoadingVersions(prev => ({ ...prev, [sessionId]: false }))
       }
     }
   }
 
-  return (
-    <div className={styles.container}>
-      <AppHeader />
+  // Build a map: sessionId → its review submissions
+  const submissionMap: Record<string, ReviewSummary[]> = {}
+  for (const s of mySubmissions) {
+    if (!submissionMap[s.session_id]) submissionMap[s.session_id] = []
+    submissionMap[s.session_id].push(s)
+  }
 
-      <div className={styles.content}>
-        <div className={styles.welcome}>
-          <div className={styles.badge}>
-            <span className={styles.roleIcon}>{user?.role === 'author' ? '✏️' : '✓'}</span>
-            <span className={styles.roleLabel}>{user?.role === 'author' ? 'Author' : 'Reviewer'}</span>
+  // ── Author view ──────────────────────────────────────────────────────────────
+  if (user?.role === 'author') {
+    return (
+      <div className={styles.page}>
+        <AppHeader />
+        <div className={styles.body}>
+          <div className={styles.pageHeader}>
+            <div>
+              <h1 className={styles.pageTitle}>My Projects</h1>
+              <p className={styles.pageSub}>Welcome back, {user.name}</p>
+            </div>
+            <button className={styles.newBtn} onClick={() => navigate('/')}>
+              <Plus size={15} /> New Project
+            </button>
           </div>
 
-          <h1 className={styles.title}>Welcome back, {user?.name}!</h1>
-          <p className={styles.subtitle}>{user?.email}</p>
-        </div>
-
-        <div className={styles.actions}>
-          {user?.role === 'author' && (
-            <>
-              <div className={styles.card}>
-                <h2 className={styles.cardTitle}>Create New HLD</h2>
-                <p className={styles.cardDesc}>
-                  Start by uploading your product specification documents
-                </p>
-                <Button onClick={handleStartNewHLD}>
-                  Start New Project →
-                </Button>
-              </div>
-
-              <div className={styles.card}>
-                <h2 className={styles.cardTitle}>My Submitted HLDs</h2>
-                <p className={styles.cardDesc}>
-                  {loading ? 'Loading...' : `${Object.keys(groupSubmissionsBySession(mySubmissions)).length} session(s) submitted for review`}
-                </p>
-                {!loading && mySubmissions.length > 0 ? (
-                  <div className={styles.reviewList}>
-                    {Object.entries(groupSubmissionsBySession(mySubmissions)).slice(0, 5).map(([sessionId, sessionGroup]) => (
-                      <div key={sessionId}>
-                        <div className={styles.reviewItem}>
-                          <div className={styles.reviewInfo}>
-                            <strong className={styles.projectName}>{sessionGroup.projectName}</strong>
-                            <span className={styles.authorInfo}>
-                              {sessionGroup.reviews.length} reviewer(s) • v{sessionGroup.versionNumber}
-                            </span>
-                            <span className={styles.reviewDate}>
-                              {new Date(sessionGroup.submittedAt).toLocaleDateString()}
-                            </span>
-                            <div className={styles.reviewerStatusList}>
-                              {sessionGroup.reviews.map((review) => (
-                                <div key={review.id} className={styles.reviewerStatus}>
-                                  <span className={styles.reviewerName}>{review.reviewer_name}:</span>
-                                  <span
-                                    className={styles.statusBadge}
-                                    data-status={review.status}
-                                  >
-                                    {review.status === 'approved' && '✅ Approved'}
-                                    {review.status === 'rejected' && '❌ Rejected'}
-                                    {review.status === 'changes_requested' && '🔄 Changes Requested'}
-                                    {review.status === 'pending' && '⏳ Pending'}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <div className={styles.reviewActions}>
-                            <Button size="sm" variant="ghost" onClick={() => handleToggleVersions(sessionId)}>
-                              {expandedSession === sessionId ? '▼ Hide' : '▶ Versions'}
-                            </Button>
-                            <Button size="sm" variant="secondary" onClick={() => navigate(`/hld-output?session=${sessionId}`)}>
-                              View
-                            </Button>
-                          </div>
+          {loading ? (
+            <div className={styles.loadingState}>Loading projects…</div>
+          ) : sessions.length === 0 ? (
+            <div className={styles.emptyState}>
+              <Layers size={40} className={styles.emptyIcon} />
+              <p className={styles.emptyTitle}>No projects yet</p>
+              <p className={styles.emptySub}>Upload a requirements document to generate your first HLD</p>
+              <button className={styles.newBtn} onClick={() => navigate('/')}>
+                <Plus size={15} /> Start New Project
+              </button>
+            </div>
+          ) : (
+            <div className={styles.projectList}>
+              {sessions.map(session => {
+                const reviews = submissionMap[session.id] || []
+                // If project has been submitted for review, HLD must exist → always "Open"
+                const isHLD = session.stage === 'hld_generated' || reviews.length > 0
+                // Pick the most "alarming" review status to surface
+                const worstStatus = reviews.find(r => r.status === 'changes_requested')?.status
+                  ?? reviews.find(r => r.status === 'rejected')?.status
+                  ?? reviews.find(r => r.status === 'pending')?.status
+                  ?? reviews.find(r => r.status === 'approved')?.status
+                const { label, color, bg } = stageLabel(session.stage, worstStatus)
+                return (
+                  <div key={session.id} className={styles.projectRow}>
+                    <div className={styles.projectRowLeft}>
+                      <div className={styles.projectRowIcon}>
+                        <FileText size={16} />
+                      </div>
+                      <div className={styles.projectRowInfo}>
+                        <div className={styles.projectRowTitle}>
+                          {session.project_name || 'Untitled Project'}
+                          <span className={styles.stagePill} style={{ color, background: bg }}>{label}</span>
                         </div>
-
-                        {expandedSession === sessionId && (
-                          <div className={styles.versionHistory}>
-                            {loadingVersions[sessionId] ? (
-                              <p className={styles.loading}>Loading versions...</p>
-                            ) : versionHistory[sessionId] ? (
-                              <div className={styles.versionList}>
-                                {versionHistory[sessionId].map((version) => (
-                                  <div key={version.version_id} className={styles.versionItem}>
-                                    <div className={styles.versionHeader}>
-                                      <span className={styles.versionNumber}>v{version.version_number}</span>
-                                      <span className={styles.versionDate}>
-                                        {new Date(version.created_at).toLocaleDateString()}
+                        <div className={styles.projectRowMeta}>
+                          <span>{session.template?.toUpperCase()}</span>
+                          <span>·</span>
+                          <span>{new Date(session.created_at).toLocaleDateString()}</span>
+                          {reviews.length > 0 && (
+                            <>
+                              <span>·</span>
+                              <span>{reviews.length} reviewer{reviews.length > 1 ? 's' : ''}</span>
+                            </>
+                          )}
+                        </div>
+                        {reviews.length > 0 && (
+                          <div className={styles.reviewerChips}>
+                            {reviews.map(r => {
+                              const { icon: Icon, color: sc, bg: sb } = statusInfo(r.status)
+                              return (
+                                <span key={r.id} className={styles.reviewerChip} style={{ color: sc, background: sb }}>
+                                  <Icon size={10} />
+                                  {r.reviewer_name}
+                                </span>
+                              )
+                            })}
+                          </div>
+                        )}
+                        {reviews.length > 0 && (
+                          <button
+                            className={styles.versionsLink}
+                            onClick={e => { e.stopPropagation(); handleToggleVersions(session.id) }}
+                          >
+                            {expandedSession === session.id ? 'Hide version history' : 'Version history'}
+                          </button>
+                        )}
+                        {expandedSession === session.id && (
+                          <div className={styles.versionPanel}>
+                            {loadingVersions[session.id] ? (
+                              <p className={styles.versionLoading}>Loading…</p>
+                            ) : (versionHistory[session.id] || []).map(v => (
+                              <div key={v.version_id} className={styles.versionRow}>
+                                <span className={styles.versionTag}>v{v.version_number}</span>
+                                <span className={styles.versionDate}>{new Date(v.created_at).toLocaleDateString()}</span>
+                                <div className={styles.versionReviewers}>
+                                  {(v.reviews as any[]).map((rv: any) => {
+                                    const { label: rl, color: rc, bg: rb } = statusInfo(rv.status)
+                                    return (
+                                      <span key={rv.reviewer_id} className={styles.reviewerChip} style={{ color: rc, background: rb }}>
+                                        {rv.reviewer_name} · {rl}
                                       </span>
-                                    </div>
-                                    <div className={styles.versionReviews}>
-                                      {version.reviews.map((review: any) => {
-                                        return (
-                                          <div key={review.reviewer_id} className={styles.versionReview}>
-                                            <span className={styles.reviewerName}>{review.reviewer_name}</span>
-                                            <span
-                                              className={styles.statusBadge}
-                                              data-status={review.status}
-                                            >
-                                              {review.status === 'approved' && '✅ Approved'}
-                                              {review.status === 'rejected' && '❌ Rejected'}
-                                              {review.status === 'changes_requested' && '🔄 Changes'}
-                                              {review.status === 'pending' && '⏳ Pending'}
-                                            </span>
-                                            {review.review_id && (
-                                              <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                onClick={() => navigate(`/hld-output?review=${review.review_id}`)}
-                                                title={review.status === 'pending' ? 'View submitted HLD (no comments yet)' : 'View HLD with reviewer comments'}
-                                              >
-                                                {review.status === 'pending' ? 'View HLD' : 'View Review'}
-                                              </Button>
-                                            )}
-                                          </div>
-                                        )
-                                      })}
-                                    </div>
-                                  </div>
-                                ))}
+                                    )
+                                  })}
+                                </div>
                               </div>
-                            ) : (
-                              <p className={styles.emptyState}>No version history</p>
-                            )}
+                            ))}
                           </div>
                         )}
                       </div>
-                    ))}
+                    </div>
+                    <button
+                      className={isHLD ? styles.openBtn : styles.continueBtn}
+                      onClick={() => navigate(isHLD ? `/hld-output?session=${session.id}` : `/?session=${session.id}`)}
+                    >
+                      {isHLD ? <><FileText size={13} /> Open</> : <><ArrowRight size={13} /> Continue</>}
+                    </button>
                   </div>
-                ) : !loading ? (
-                  <p className={styles.emptyState}>No submissions yet</p>
-                ) : null}
-              </div>
-            </>
+                )
+              })}
+            </div>
           )}
 
-          {user?.role === 'reviewer' && (
-            <>
-              <div className={styles.card}>
-                <h2 className={styles.cardTitle}>Pending Reviews</h2>
-                <p className={styles.cardDesc}>
-                  {loading ? 'Loading...' : `${pendingReviews.length} HLD(s) waiting for your review`}
-                </p>
-                {!loading && pendingReviews.length > 0 ? (
-                  <div className={styles.reviewList}>
-                    {pendingReviews.map((review) => (
-                      <div key={review.id} className={styles.reviewItem}>
-                        <div className={styles.reviewInfo}>
-                          <strong className={styles.projectName}>{review.project_name || 'Unnamed Project'}</strong>
-                          <span className={styles.authorInfo}>From: {review.author_name}</span>
-                          <span className={styles.reviewDate}>
-                            {new Date(review.submitted_at).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <Button size="sm" onClick={() => navigate(`/hld-output?review=${review.id}`)}>
-                          Review →
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                ) : !loading ? (
-                  <p className={styles.emptyState}>No pending reviews</p>
-                ) : null}
-              </div>
+          <div className={styles.footer}>
+            <button className={styles.signOutBtn} onClick={handleLogout}>Sign out</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
-              <div className={styles.card}>
-                <h2 className={styles.cardTitle}>Completed Reviews</h2>
-                <p className={styles.cardDesc}>
-                  {loading ? 'Loading...' : `${completedReviews.length} completed review(s)`}
-                </p>
-                {!loading && completedReviews.length > 0 ? (
-                  <div className={styles.reviewList}>
-                    {completedReviews.slice(0, 5).map((review) => (
-                      <div key={review.id} className={styles.reviewItem}>
-                        <div className={styles.reviewInfo}>
-                          <strong className={styles.projectName}>{review.project_name}</strong>
-                          <span className={styles.authorInfo}>Author: {review.author_name}</span>
-                          <span className={styles.reviewDate}>
-                            {review.reviewed_at && new Date(review.reviewed_at).toLocaleDateString()}
-                          </span>
-                          <span
-                            className={styles.statusBadge}
-                            data-status={review.status}
-                          >
-                            {review.status === 'approved' && '✅ Approved'}
-                            {review.status === 'rejected' && '❌ Rejected'}
-                            {review.status === 'changes_requested' && '🔄 Changes Requested'}
-                          </span>
-                        </div>
-                        <Button size="sm" variant="secondary" onClick={() => navigate(`/hld-output?review=${review.id}`)}>
-                          View
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                ) : !loading ? (
-                  <p className={styles.emptyState}>No completed reviews yet</p>
-                ) : null}
+  // ── Reviewer view ────────────────────────────────────────────────────────────
+  return (
+    <div className={styles.page}>
+      <AppHeader />
+      <div className={styles.body}>
+        <div className={styles.pageHeader}>
+          <div>
+            <h1 className={styles.pageTitle}>Review Queue</h1>
+            <p className={styles.pageSub}>Welcome back, {user?.name}</p>
+          </div>
+        </div>
+
+        <div className={styles.reviewerColumns}>
+          {/* Pending */}
+          <div className={styles.reviewColumn}>
+            <h2 className={styles.columnTitle}>
+              <Clock size={15} /> Pending
+              {!loading && <span className={styles.countBadge}>{pendingReviews.length}</span>}
+            </h2>
+            {loading ? (
+              <div className={styles.loadingState}>Loading…</div>
+            ) : pendingReviews.length === 0 ? (
+              <p className={styles.columnEmpty}>All caught up</p>
+            ) : pendingReviews.map(review => (
+              <div key={review.id} className={styles.reviewCard}>
+                <div className={styles.reviewCardBody}>
+                  <p className={styles.reviewCardTitle}>{review.project_name || 'Unnamed Project'}</p>
+                  <p className={styles.reviewCardSub}>From {review.author_name} · {new Date(review.submitted_at).toLocaleDateString()}</p>
+                </div>
+                <button className={styles.reviewBtn} onClick={() => navigate(`/hld-output?review=${review.id}`)}>
+                  Review <ArrowRight size={13} />
+                </button>
               </div>
-            </>
-          )}
+            ))}
+          </div>
+
+          {/* Completed */}
+          <div className={styles.reviewColumn}>
+            <h2 className={styles.columnTitle}>
+              <CheckCircle size={15} /> Completed
+              {!loading && <span className={styles.countBadge}>{completedReviews.length}</span>}
+            </h2>
+            {loading ? (
+              <div className={styles.loadingState}>Loading…</div>
+            ) : completedReviews.length === 0 ? (
+              <p className={styles.columnEmpty}>No completed reviews yet</p>
+            ) : completedReviews.slice(0, 8).map(review => {
+              const { label, icon: Icon, color, bg } = statusInfo(review.status)
+              return (
+                <div key={review.id} className={styles.reviewCard}>
+                  <div className={styles.reviewCardBody}>
+                    <p className={styles.reviewCardTitle}>{review.project_name}</p>
+                    <p className={styles.reviewCardSub}>
+                      {review.author_name} · {review.reviewed_at && new Date(review.reviewed_at).toLocaleDateString()}
+                    </p>
+                    <span className={styles.statusChip} style={{ color, background: bg }}>
+                      <Icon size={10} /> {label}
+                    </span>
+                  </div>
+                  <button className={styles.viewBtn} onClick={() => navigate(`/hld-output?review=${review.id}`)}>
+                    View
+                  </button>
+                </div>
+              )
+            })}
+          </div>
         </div>
 
         <div className={styles.footer}>
-          <Button variant="ghost" onClick={handleLogout}>
-            Logout
-          </Button>
+          <button className={styles.signOutBtn} onClick={handleLogout}>Sign out</button>
         </div>
       </div>
     </div>
