@@ -7,11 +7,11 @@ html { font-size: 16px; -webkit-font-smoothing: antialiased; }
 body {
   font-family: var(--font-ui);
   background:
-    radial-gradient(at 0% 0%,   hsla(238, 100%, 96%, 1) 0, transparent 55%),
-    radial-gradient(at 50% 0%,  hsla(255, 100%, 96%, 1) 0, transparent 55%),
-    radial-gradient(at 100% 0%, hsla(245, 100%, 96%, 1) 0, transparent 55%),
-    radial-gradient(at 50% 100%,hsla(260, 100%, 97%, 1) 0, transparent 55%),
-    #f8fafc;
+    radial-gradient(ellipse 800px 700px at -5% -5%,  rgba(99,102,241,0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 600px 500px at 105% 105%, rgba(16,185,129,0.14) 0%, transparent 60%),
+    radial-gradient(ellipse 500px 400px at 100% 0%,  rgba(139,92,246,0.10) 0%, transparent 55%),
+    radial-gradient(ellipse 400px 300px at 0% 100%,  rgba(59,130,246,0.08) 0%, transparent 55%),
+    #f0f0f8;
   background-attachment: fixed;
   color: var(--color-text);
   min-height: 100dvh;

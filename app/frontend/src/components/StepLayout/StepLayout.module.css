@@ -2,6 +2,6 @@
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: var(--color-surface-2);
+  background: transparent;
   overflow: hidden;
 }

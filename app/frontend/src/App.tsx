@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import type { HLDDocument, HLDTemplate, Section, Track } from '@/types'
+import { deleteSessionHld } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { LoginPage } from '@/features/auth'
 import { Dashboard } from '@/features/dashboard'
@@ -111,9 +112,11 @@ export function App() {
       setSessionId(null)
       setProjectName(null)
     }
-    // Template choice and generated HLD are downstream of every restart
-    // target; interview answers live in the backend and are overwritten when
-    // the interview is redone, characteristics re-detect on revisit.
+    // Template choice and generated HLD are downstream of every restart target.
+    // Always clear the backend HLD so the next generation runs fresh.
+    if (sessionId) {
+      deleteSessionHld(sessionId).catch(() => {/* silently ignore if already gone */})
+    }
     setTemplate(null)
     setCustomSections(undefined)
     setCustomTemplateText(undefined)
@@ -171,7 +174,7 @@ export function App() {
           path="/"
           element={
             <ProtectedRoute>
-              <SpecUpload onReady={handleSpecReady} onLoadSession={handleLoadSession} currentProjectName={projectName} hasSpec={!!specText} track={track} onTrackChange={setTrack} />
+              <SpecUpload onReady={handleSpecReady} onLoadSession={handleLoadSession} onNewProject={() => handleRestartFrom('/')} currentProjectName={projectName} hasSpec={!!specText} track={track} onTrackChange={setTrack} />
             </ProtectedRoute>
           }
         />

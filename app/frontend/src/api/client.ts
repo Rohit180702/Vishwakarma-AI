@@ -280,6 +280,10 @@ export function deleteSession(id: string): Promise<void> {
   return request<void>(`/sessions/${id}`, { method: 'DELETE' })
 }
 
+export function deleteSessionHld(id: string): Promise<void> {
+  return request<void>(`/sessions/${id}/hld`, { method: 'DELETE' })
+}
+
 /**
  * Upload multiple specification files and get unified context
  */

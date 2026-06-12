@@ -6,6 +6,8 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 6fr) minmax(0, 3fr);
@@ -13,12 +15,13 @@
   align-items: start;
   column-gap: 32px;
   row-gap: 24px;
-  padding: 40px 32px 64px;
+  padding: 40px 0 64px;
   max-width: 1536px;
   margin: 0 auto;
   width: 100%;
   background: transparent;
 }
+.page::-webkit-scrollbar { display: none; }
 
 
 /* Hero spans all 3 columns */
@@ -42,9 +45,26 @@
   align-items: center;
   gap: 10px;
   z-index: 50;
-  /* Don't participate in the grid flow */
   grid-column: unset;
 }
+
+.newProjectBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+.newProjectBtn:hover { background: #4f46e5; }
 
 .topBarLabel {
   font-size: 10px; font-weight: 700; text-transform: uppercase;
@@ -148,6 +168,24 @@
   flex-shrink: 0;
 }
 
+.dropdownNewBtn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #6366f1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  text-align: left;
+  transition: background 0.1s;
+}
+.dropdownNewBtn:hover { background: #eef2ff; }
+
 .dropdownNewHint {
   display: flex; align-items: center; gap: 7px;
   padding: 10px 14px;
@@ -207,6 +245,7 @@
 }
 .featureCard_indigo:hover  { border-color: rgba(99,102,241,0.4); }
 .featureCard_purple:hover  { border-color: rgba(139,92,246,0.4); }
+.featureCard_violet:hover  { border-color: rgba(124,58,237,0.4); }
 .featureCard_emerald:hover { border-color: rgba(16,185,129,0.4); }
 .featureCard_amber:hover   { border-color: rgba(245,158,11,0.4); }
 
@@ -219,11 +258,13 @@
 }
 .featureIconWrap_indigo  { background: #e0e7ff; color: var(--color-primary-hover); }
 .featureIconWrap_purple  { background: #ede9fe; color: #7c3aed; }
+.featureIconWrap_violet  { background: #ede9fe; color: #7c3aed; }
 .featureIconWrap_emerald { background: #d1fae5; color: #059669; }
 .featureIconWrap_amber   { background: #fef3c7; color: #d97706; }
 
 .featureCard:hover .featureIconWrap_indigo  { background: var(--color-primary-hover); color: #fff; }
 .featureCard:hover .featureIconWrap_purple  { background: #7c3aed; color: #fff; }
+.featureCard:hover .featureIconWrap_violet  { background: #7c3aed; color: #fff; }
 .featureCard:hover .featureIconWrap_emerald { background: #059669; color: #fff; }
 .featureCard:hover .featureIconWrap_amber   { background: #d97706; color: #fff; }
 
@@ -235,6 +276,7 @@
    ══════════════════════════════════════════════ */
 .center {
   grid-row: 2;
+  align-self: center;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -460,13 +502,16 @@
   box-shadow: var(--shadow-sm);
 }
 .trackCardActive {
-  border-color: var(--color-primary);
-  background: var(--color-primary-light);
-  box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+  border-color: var(--color-primary) !important;
+  background: rgba(238,240,255,0.95) !important;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.2) !important;
 }
-.trackCardBoth {
-  border-color: var(--color-primary-muted);
+.trackCardActive .trackCardName {
+  color: var(--color-primary);
 }
+.trackCardBoth {}
+.trackCardTechnical {}
+.trackCardFunctional {}
 .trackCardBadge {
   position: absolute;
   top: -8px;

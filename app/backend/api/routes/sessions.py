@@ -285,3 +285,10 @@ async def delete_session(session_id: str) -> None:
     if session:
         await session.delete()
     get_storage().delete_session(session_id)
+
+
+@router.delete("/{session_id}/hld", status_code=status.HTTP_204_NO_CONTENT, summary="Clear generated HLD for a session")
+async def delete_session_hld(session_id: str) -> None:
+    if not get_storage().session_exists(session_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    get_storage().delete_hld(session_id)

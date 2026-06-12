@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   UploadCloud, AlertCircle, Trash2, ArrowRight, X,
-  Layers, FileSearch, ChevronDown, Plus, FolderOpen, Zap,
+  Layers, FileSearch, ChevronDown, Plus, FolderOpen, Zap, Network, GitPullRequest,
 } from 'lucide-react'
 import { listSessions, loadSession, deleteSession, uploadSpecFiles } from '@/api/client'
 import { useToast } from '@/components/Toast/ToastContext'
@@ -17,13 +17,15 @@ const PIPELINE_TECHNICAL = [
   { name: 'Characteristics', desc: 'Quality attributes detected, each with evidence from your requirements and a confidence score' },
   { name: 'Interview',       desc: 'Targeted questions close the gaps your requirements leave open' },
   { name: 'Framework',       desc: 'Pick the output framework that fits your team' },
-  { name: 'Generate',        desc: 'Your document is ready — structured, evidence-backed, and AI-assisted' },
+  { name: 'Generate',        desc: 'Your document is ready — structured, evidence-backed, and ready to share' },
+  { name: 'Review',          desc: 'Share with reviewers — they annotate inline, request changes, and approve' },
 ]
 
 const PIPELINE_FUNCTIONAL = [
   { name: 'Upload',    desc: 'Your requirements document is parsed and unified into one source of truth' },
   { name: 'Framework', desc: 'Pick the output format that fits your audience' },
   { name: 'Generate',  desc: 'Your document is ready — plain language, stakeholder-ready' },
+  { name: 'Review',    desc: 'Share with reviewers — they annotate inline, request changes, and approve' },
 ]
 
 const PIPELINE_BOTH = [
@@ -31,7 +33,8 @@ const PIPELINE_BOTH = [
   { name: 'Characteristics', desc: 'Quality attributes detected, each with evidence from your requirements and a confidence score' },
   { name: 'Interview',       desc: 'Targeted questions close the gaps your requirements leave open' },
   { name: 'Framework',       desc: 'Pick the output format for each track' },
-  { name: 'Generate',        desc: 'Two documents generated from the same source — consistent, evidence-backed' },
+  { name: 'Generate',        desc: 'Your document is ready — structured, evidence-backed, and ready to share' },
+  { name: 'Review',          desc: 'Share with reviewers — they annotate inline, request changes, and approve' },
 ]
 
 const FEATURES = [
@@ -43,14 +46,20 @@ const FEATURES = [
   },
   {
     icon: <FileSearch size={20} />,
-    name: 'Industry frameworks, straight from your requirements',
+    name: 'Evidence-backed decisions',
     desc: 'Follows the frameworks and principles your team already trusts — every decision is generated from your requirements, cited and confidence-scored.',
     color: 'indigo' as const,
   },
   {
-    icon: <Layers size={20} />,
-    name: 'Present it live, not as slides',
-    desc: 'Interactive diagrams simulate your architecture — click any component and watch the flow run end-to-end, with a guided exploration built for the review room.',
+    icon: <Network size={20} />,
+    name: 'Live, interactive diagrams',
+    desc: 'Architecture diagrams generated automatically — click any component to explore the flow.',
+    color: 'violet' as const,
+  },
+  {
+    icon: <GitPullRequest size={20} />,
+    name: 'Review & sign-off',
+    desc: 'Send to reviewers directly. Inline comments, change requests, and approvals — all in one place.',
     color: 'emerald' as const,
   },
 ]
@@ -58,6 +67,7 @@ const FEATURES = [
 interface SpecUploadProps {
   onReady: (specText: string, sessionId?: string, projectName?: string) => void
   onLoadSession: (spec: string, template: HLDTemplate, hld: HLDDocument, sessionId?: string, projectName?: string) => void
+  onNewProject?: () => void
   currentProjectName?: string | null
   hasSpec?: boolean
   track?: Track
@@ -71,7 +81,7 @@ interface FileWithPreview {
   id: string
 }
 
-export function SpecUpload({ onReady, onLoadSession, currentProjectName, hasSpec = false, track = 'both', onTrackChange }: SpecUploadProps) {
+export function SpecUpload({ onReady, onLoadSession, onNewProject, currentProjectName, hasSpec = false, track = 'both', onTrackChange }: SpecUploadProps) {
   const [state, setState] = useState<UploadState>('idle')
   const [errorMsg, setErrorMsg] = useState('')
   const [selectedFiles, setSelectedFiles] = useState<FileWithPreview[]>([])
@@ -212,7 +222,6 @@ export function SpecUpload({ onReady, onLoadSession, currentProjectName, hasSpec
         {/* ══════════ TOP RIGHT — project picker (floating) ══════════ */}
         {sessions.length > 0 && (
           <div className={styles.projectPickerOverlay} ref={workspaceRef}>
-            <span className={styles.topBarLabel}>Project</span>
             <div className={styles.workspacePicker}>
               <button
                 className={`${styles.workspaceBtn} ${workspaceOpen ? styles.workspaceBtnOpen : ''}`}
@@ -276,9 +285,12 @@ export function SpecUpload({ onReady, onLoadSession, currentProjectName, hasSpec
                     ))}
                   </div>
                   <div className={styles.dropdownDivider} />
-                  <div className={styles.dropdownNewHint}>
-                    <Plus size={12} /> Upload a requirements document to start a new project
-                  </div>
+                  <button
+                    className={styles.dropdownNewBtn}
+                    onClick={() => { setWorkspaceOpen(false); onNewProject?.() }}
+                  >
+                    <Plus size={13} /> New project
+                  </button>
                 </div>
               )}
             </div>
@@ -287,13 +299,12 @@ export function SpecUpload({ onReady, onLoadSession, currentProjectName, hasSpec
 
         {/* ══════════ PAGE HERO — full-width above the grid ══════════ */}
         <div className={styles.pageHero}>
-          <span className={styles.centerHeroBadge}>From requirements to Enriched Requirements Document</span>
           <h1 className={styles.centerHeroHeadline}>
             From requirements to sign-off.{' '}
             <span className={styles.centerHeroAccent}>In minutes, not weeks.</span>
           </h1>
           <p className={styles.centerHeroTagline}>
-            It reads your requirements, asks what's missing, and writes the full design — every decision backed by evidence.
+            It reads your requirements, fills the gaps, and generates structured documentation for your entire delivery team — every decision backed by evidence.
           </p>
         </div>
 
@@ -408,7 +419,13 @@ export function SpecUpload({ onReady, onLoadSession, currentProjectName, hasSpec
                 key={opt.id}
                 role="radio"
                 aria-checked={track === opt.id}
-                className={`${styles.trackCard} ${track === opt.id ? styles.trackCardActive : ''} ${opt.id === 'both' ? styles.trackCardBoth : ''}`}
+                className={[
+                  styles.trackCard,
+                  track === opt.id ? styles.trackCardActive : '',
+                  opt.id === 'both'       ? styles.trackCardBoth       : '',
+                  opt.id === 'technical'  ? styles.trackCardTechnical  : '',
+                  opt.id === 'functional' ? styles.trackCardFunctional : '',
+                ].join(' ')}
                 onClick={() => onTrackChange?.(opt.id)}
               >
                 {'badge' in opt && opt.badge && <span className={styles.trackCardBadge}>{opt.badge}</span>}

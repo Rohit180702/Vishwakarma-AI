@@ -665,7 +665,7 @@ function RFCanvas({
   const simIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const simTickRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const SIM_DURATION = 3000
+  const SIM_DURATION = 4000
 
   const stopSim = useCallback(() => {
     setIsSimulating(false)

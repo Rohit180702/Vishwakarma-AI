@@ -199,7 +199,11 @@ export function CharacteristicsPage({ sessionId }: CharacteristicsPageProps) {
   const handleContinue = async () => {
     setSaving(true)
     try {
-      const updated = characteristics.map((c, i) => ({ ...c, priority: Math.max(1, Math.min(10, 10 - i)) }))
+      const updated = characteristics.map((c, i) => ({
+        ...c,
+        priority: Math.max(1, Math.min(10, 10 - i)),
+        confidence: Math.max(0, c.confidence), // clamp -1 (manual) to 0
+      }))
       await updateCharacteristicPriorities(sessionId, updated)
       navigate('/interview')
     } catch (err: unknown) {

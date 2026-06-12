@@ -119,6 +119,11 @@ class SessionStorage:
         p = self._path(session_id, "hld.json")
         return p.read_text(encoding="utf-8") if p.exists() else "{}"
 
+    def delete_hld(self, session_id: str) -> None:
+        p = self._path(session_id, "hld.json")
+        if p.exists():
+            p.unlink()
+
     # ------------------------------------------------------------------
     # Session lifecycle
     # ------------------------------------------------------------------
