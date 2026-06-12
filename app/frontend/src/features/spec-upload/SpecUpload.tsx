@@ -7,17 +7,31 @@ import {
 import { listSessions, loadSession, deleteSession, uploadSpecFiles } from '@/api/client'
 import { useToast } from '@/components/Toast/ToastContext'
 import type { SessionSummary } from '@/api/client'
-import type { HLDDocument, HLDTemplate } from '@/types'
+import type { HLDDocument, HLDTemplate, Track } from '@/types'
 import { sessionResumeStage } from './SessionPreviewDrawer'
 import styles from './SpecUpload.module.css'
 
 // Step names mirror the FlowStepper labels exactly — one vocabulary everywhere
-const PIPELINE = [
+const PIPELINE_TECHNICAL = [
   { name: 'Upload',          desc: 'Your requirements document is parsed and unified into one source of truth' },
   { name: 'Characteristics', desc: 'Quality attributes detected, each with evidence from your requirements and a confidence score' },
   { name: 'Interview',       desc: 'Targeted questions close the gaps your requirements leave open' },
-  { name: 'Framework',       desc: 'Pick the output framework — arc42, RFC, or C4 + ADR' },
-  { name: 'Generate',        desc: 'Your Enriched Requirements Document is ready — sections, ADRs, diagrams, and an AI assistant grounded in your decisions' },
+  { name: 'Framework',       desc: 'Pick the output framework that fits your team' },
+  { name: 'Generate',        desc: 'Your document is ready — structured, evidence-backed, and AI-assisted' },
+]
+
+const PIPELINE_FUNCTIONAL = [
+  { name: 'Upload',    desc: 'Your requirements document is parsed and unified into one source of truth' },
+  { name: 'Framework', desc: 'Pick the output format that fits your audience' },
+  { name: 'Generate',  desc: 'Your document is ready — plain language, stakeholder-ready' },
+]
+
+const PIPELINE_BOTH = [
+  { name: 'Upload',          desc: 'Your requirements document is parsed and unified into one source of truth' },
+  { name: 'Characteristics', desc: 'Quality attributes detected, each with evidence from your requirements and a confidence score' },
+  { name: 'Interview',       desc: 'Targeted questions close the gaps your requirements leave open' },
+  { name: 'Framework',       desc: 'Pick the output format for each track' },
+  { name: 'Generate',        desc: 'Two documents generated from the same source — consistent, evidence-backed' },
 ]
 
 const FEATURES = [
@@ -51,6 +65,9 @@ interface SpecUploadProps {
   onReady: (specText: string, sessionId?: string, projectName?: string) => void
   onLoadSession: (spec: string, template: HLDTemplate, hld: HLDDocument, sessionId?: string, projectName?: string) => void
   currentProjectName?: string | null
+  hasSpec?: boolean
+  track?: Track
+  onTrackChange?: (track: Track) => void
 }
 
 type UploadState = 'idle' | 'dragging' | 'reading' | 'uploading' | 'error'
@@ -60,7 +77,7 @@ interface FileWithPreview {
   id: string
 }
 
-export function SpecUpload({ onReady, onLoadSession, currentProjectName }: SpecUploadProps) {
+export function SpecUpload({ onReady, onLoadSession, currentProjectName, hasSpec = false, track = 'both', onTrackChange }: SpecUploadProps) {
   const [state, setState] = useState<UploadState>('idle')
   const [errorMsg, setErrorMsg] = useState('')
   const [selectedFiles, setSelectedFiles] = useState<FileWithPreview[]>([])
@@ -92,23 +109,15 @@ export function SpecUpload({ onReady, onLoadSession, currentProjectName }: SpecU
     setSwitchingId(id)
     try {
       const detail = await loadSession(id)
-      const dest = sessionResumeStage(detail)
       const name = detail.project_name
 
       if (currentProjectName && currentProjectName !== name) {
         showToast(`Switched to ${name}`, 'info')
       }
 
-      if (dest === 'generate') {
-        const hld: HLDDocument = JSON.parse(detail.hld_json)
-        onLoadSession(detail.spec_text, detail.template as HLDTemplate, hld, detail.id, name)
-        navigate('/generate')
-      } else {
-        onReady(detail.spec_text, detail.id, name)
-        if (dest === 'format') navigate('/framework')
-        else if (dest === 'interview') navigate('/interview')
-        else navigate('/characteristics')
-      }
+      // Always land on the upload page — user decides where to go next
+      onReady(detail.spec_text, detail.id, name)
+      navigate('/')
     } catch {
       showToast('Failed to load project. Please try again.', 'error')
     } finally {
@@ -177,7 +186,7 @@ export function SpecUpload({ onReady, onLoadSession, currentProjectName }: SpecU
 
       onReady(response.unified_spec_text, response.session_id, response.project_name)
       setState('idle')
-      navigate('/characteristics')
+      navigate(track === 'functional' ? '/framework' : '/characteristics')
     } catch (error) {
       console.error('Upload failed:', error)
       const msg = 'Failed to upload and parse documents. Please try again.'
@@ -316,6 +325,27 @@ export function SpecUpload({ onReady, onLoadSession, currentProjectName }: SpecU
           </div>
 
 
+          {/* Track selector */}
+          <div className={styles.trackSelector} role="radiogroup" aria-label="Document track">
+            {([
+              { id: 'technical' as Track, name: 'Technical', sub: 'Architecture & engineering output' },
+              { id: 'functional' as Track, name: 'Functional', sub: 'Business & stakeholder output' },
+              { id: 'both' as Track,      name: 'Both',       sub: 'One pipeline, two documents', badge: 'Recommended' },
+            ] as const).map(opt => (
+              <button
+                key={opt.id}
+                role="radio"
+                aria-checked={track === opt.id}
+                className={`${styles.trackCard} ${track === opt.id ? styles.trackCardActive : ''} ${opt.id === 'both' ? styles.trackCardBoth : ''}`}
+                onClick={() => onTrackChange?.(opt.id)}
+              >
+                {'badge' in opt && opt.badge && <span className={styles.trackCardBadge}>{opt.badge}</span>}
+                <span className={styles.trackCardName}>{opt.name}</span>
+                <span className={styles.trackCardSub}>{opt.sub}</span>
+              </button>
+            ))}
+          </div>
+
           {state === 'error' && (
             <div className={styles.errorBanner} role="alert">
               <AlertCircle size={15} />
@@ -327,6 +357,23 @@ export function SpecUpload({ onReady, onLoadSession, currentProjectName }: SpecU
             <div className={styles.reading}>
               <span className={styles.readingSpinner} />
               <span>Uploading and parsing documents…</span>
+            </div>
+          ) : hasSpec && selectedFiles.length === 0 ? (
+            <div className={styles.specLoadedBanner}>
+              <div className={styles.specLoadedIcon}><FolderOpen size={18} /></div>
+              <div className={styles.specLoadedText}>
+                <span className={styles.specLoadedTitle}>Requirements document loaded</span>
+                <span className={styles.specLoadedSub}>Drop or browse to replace with a different document</span>
+              </div>
+              <label htmlFor="spec-file-replace" className={styles.specLoadedReplace}>Replace</label>
+              <input
+                id="spec-file-replace"
+                type="file"
+                accept=".txt,.md,.docx,.pdf"
+                multiple
+                className={styles.hiddenInput}
+                onChange={onInputChange}
+              />
             </div>
           ) : (
             <label
@@ -402,12 +449,12 @@ export function SpecUpload({ onReady, onLoadSession, currentProjectName }: SpecU
           <div className={styles.howItWorksCard}>
             <div className={styles.howItWorksInner}>
               <div className={styles.pipeline}>
-                {PIPELINE.map((step, i) => (
+                {(track === 'functional' ? PIPELINE_FUNCTIONAL : track === 'both' ? PIPELINE_BOTH : PIPELINE_TECHNICAL).map((step, i, arr) => (
                   <div key={step.name} className={styles.pipelineStep}>
                     {/* flex flex-col items-center: dot + line */}
                     <div className={styles.stepIndicator}>
                       <span className={i === 0 ? styles.stepDotActive : styles.stepDotMuted} />
-                      {i < PIPELINE.length - 1 && <span className={styles.stepLine} />}
+                      {i < arr.length - 1 && <span className={styles.stepLine} />}
                     </div>
                     <div className={styles.stepText}>
                       <span className={i === 0 ? styles.stepNameActive : styles.stepNameMuted}>

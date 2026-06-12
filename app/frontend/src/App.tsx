@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import type { HLDDocument, HLDTemplate, Section } from '@/types'
+import type { HLDDocument, HLDTemplate, Section, Track } from '@/types'
 import { useAuth } from '@/contexts/AuthContext'
 import { LoginPage } from '@/features/auth'
 import { Dashboard } from '@/features/dashboard'
@@ -51,6 +51,7 @@ export function App() {
   const [specText, setSpecText]     = useState<string>((saved.specText as string) ?? '')
   const [sessionId, setSessionId]   = useState<string | null>((saved.sessionId as string) ?? null)
   const [projectName, setProjectName] = useState<string | null>((saved.projectName as string) ?? null)
+  const [track, setTrack]           = useState<Track>((saved.track as Track) ?? 'both')
   const [template, setTemplate]     = useState<HLDTemplate | null>((saved.template as HLDTemplate) ?? null)
   const [customSections, setCustomSections]         = useState<Section[] | undefined>((saved.customSections as Section[]) ?? undefined)
   const [customTemplateText, setCustomTemplateText] = useState<string | undefined>(undefined)
@@ -64,10 +65,10 @@ export function App() {
   useEffect(() => {
     try {
       sessionStorage.setItem(SS_KEY, JSON.stringify({
-        specText, sessionId, projectName, template, customSections,
+        specText, sessionId, projectName, track, template, customSections,
       }))
     } catch { /* storage quota exceeded — swallow silently */ }
-  }, [specText, sessionId, projectName, template, customSections])
+  }, [specText, sessionId, projectName, track, template, customSections])
 
   const handleSpecReady = (text: string, sid?: string, name?: string) => {
     setSpecText(text)
@@ -142,11 +143,11 @@ export function App() {
 
   // Which steps can be navigated to given current session state.
   const stepAccessible: boolean[] = [
-    true,
-    !!(specText && sessionId),
-    !!(specText && sessionId),
-    !!specText,
-    !!(specText && template),
+    true,                                                    // 0 Upload — always
+    !!(specText && sessionId) && track !== 'functional',     // 1 Characteristics — skip for functional
+    !!(specText && sessionId) && track !== 'functional',     // 2 Interview — skip for functional
+    !!specText,                                              // 3 Framework
+    !!(specText && template),                                // 4 Generate
   ]
 
   return (
@@ -170,27 +171,31 @@ export function App() {
           path="/"
           element={
             <ProtectedRoute>
-              <SpecUpload onReady={handleSpecReady} onLoadSession={handleLoadSession} currentProjectName={projectName} />
+              <SpecUpload onReady={handleSpecReady} onLoadSession={handleLoadSession} currentProjectName={projectName} hasSpec={!!specText} track={track} onTrackChange={setTrack} />
             </ProtectedRoute>
           }
         />
+
+        {/* Step 2 — Characteristics (skipped for functional track) */}
         <Route
           path="/characteristics"
           element={
             <ProtectedRoute>
-              {specText && sessionId
-                ? <CharacteristicsPage sessionId={sessionId} />
-                : <Navigate to="/" replace />}
+              {track === 'functional' ? <Navigate to="/framework" replace />
+              : specText && sessionId ? <CharacteristicsPage sessionId={sessionId} />
+              : <Navigate to="/" replace />}
             </ProtectedRoute>
           }
         />
+
+        {/* Step 3 — Interview (skipped for functional track) */}
         <Route
           path="/interview"
           element={
             <ProtectedRoute>
-              {specText && sessionId
-                ? <InterviewPage sessionId={sessionId} onSpecReady={handleSpecReady} onInterviewComplete={handleInterviewComplete} />
-                : <Navigate to="/" replace />}
+              {track === 'functional' ? <Navigate to="/framework" replace />
+              : specText && sessionId ? <InterviewPage sessionId={sessionId} onSpecReady={handleSpecReady} onInterviewComplete={handleInterviewComplete} />
+              : <Navigate to="/" replace />}
             </ProtectedRoute>
           }
         />
@@ -199,7 +204,7 @@ export function App() {
           element={
             <ProtectedRoute>
               {specText
-                ? <FormatSelection onSelected={handleFormatSelected} />
+                ? <FormatSelection onSelected={handleFormatSelected} track={track} />
                 : <Navigate to="/" replace />}
             </ProtectedRoute>
           }
@@ -216,6 +221,7 @@ export function App() {
                 specText={specText}
                 sessionId={sessionId ?? undefined}
                 template={template}
+                track={track}
                 customSections={customSections}
                 customTemplateText={customTemplateText}
                 preloadedHld={preloadedHld}

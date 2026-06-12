@@ -5,13 +5,14 @@ import {
   AlertTriangle, ArrowLeft, BookMarked, Check, ChevronLeft, Download,
   FileText, GitBranch, MessageSquare, PanelRightClose, PanelRightOpen, Send,
 } from 'lucide-react'
+import JSZip from 'jszip'
 import { Button } from '@/components/Button'
 import { Spinner } from '@/components/Spinner'
 import { AppHeader } from '@/components/AppHeader'
 import { streamHLD, saveSession, loadSession, getSessionReviewStatus, getReview, getSessionFeedback, getSessionVersions, ApiError } from '@/api/client'
 import { useToast } from '@/components/Toast/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
-import type { HLDDocument, HLDEditCommand, HLDTemplate, Section } from '@/types'
+import type { HLDDocument, HLDEditCommand, HLDTemplate, Section, Track } from '@/types'
 import { FRAMEWORK_OPTIONS } from '@/types'
 import { ChatPanel } from './ChatPanel'
 import { ReviewCommunicationPanel } from './ReviewCommunicationPanel'
@@ -27,17 +28,19 @@ interface HLDOutputProps {
   specText: string
   sessionId?: string
   template: HLDTemplate
+  track?: Track
   customSections?: Section[]
   customTemplateText?: string
   preloadedHld?: HLDDocument | null
   onGenerated?: (hld: HLDDocument) => void
 }
 
-type View = 'document' | 'diagram' | 'adrs'
+type View = 'document' | 'diagram' | 'adrs' | 'user-journeys' | 'business-rules'
+type ErdTab = 'technical' | 'functional'
 type GenState = 'idle' | 'checking' | 'generating' | 'done' | 'error'
 
 export function HLDOutput({
-  specText, sessionId, template, customSections,
+  specText, sessionId, template, track = 'technical', customSections,
   customTemplateText, preloadedHld, onGenerated,
 }: HLDOutputProps) {
   const [searchParams] = useSearchParams()
@@ -54,6 +57,8 @@ export function HLDOutput({
     () => (sessionStorage.getItem(viewKey) as View) ?? 'document'
   )
   const setView = (v: View) => { setActiveView(v); sessionStorage.setItem(viewKey, v) }
+
+  const [erdTab, setErdTab] = useState<ErdTab>('technical')
 
   const [scrollToKey, setScrollToKey] = useState<string | null>(null)
   const [activeSectionKey, setActiveSectionKey] = useState<string | null>(null)
@@ -251,40 +256,75 @@ export function HLDOutput({
   // ---------------------------------------------------------------------------
   // Export
   // ---------------------------------------------------------------------------
-  const handleExport = useCallback(() => {
+  const handleExport = useCallback(async () => {
     if (!hld) return
-    const lines: string[] = [`# ${hld.project_name}\n`]
+    const slug = hld.project_name.replace(/[^a-z0-9]/gi, '_').toLowerCase()
+    const zip  = new JSZip()
+    const folder = zip.folder(slug)!
+
+    // ── document.md ──────────────────────────────────────────────────────────
+    const docLines: string[] = [`# ${hld.project_name}\n`]
     for (const s of hld.sections) {
-      lines.push(`## ${s.number ? `${s.number}. ` : ''}${s.title}\n`)
-      lines.push(s.content)
-      lines.push('')
+      docLines.push(`## ${s.number ? `${s.number}. ` : ''}${s.title}\n`)
+      docLines.push(s.content)
+      docLines.push('')
     }
+    folder.file('document.md', docLines.join('\n'))
+
+    // ── adrs.md ───────────────────────────────────────────────────────────────
     if (hld.adrs.length > 0) {
-      lines.push('---\n## Architecture Decision Records\n')
+      const adrLines: string[] = [`# ${hld.project_name} — Architecture Decision Records\n`]
       for (const adr of hld.adrs) {
-        lines.push(`### ${adr.id}: ${adr.title}\n`)
-        lines.push(`**Status:** ${adr.status}  \n**Context:** ${adr.context}\n`)
-        lines.push(`**Decision:** ${adr.decision}\n`)
+        adrLines.push(`## ${adr.id}: ${adr.title}\n`)
+        adrLines.push(`**Status:** ${adr.status}  \n**Context:** ${adr.context}\n`)
+        adrLines.push(`**Decision:** ${adr.decision}\n`)
         if (adr.alternatives?.length > 0) {
-          lines.push('**Alternatives considered:**')
+          adrLines.push('**Alternatives considered:**')
           for (const alt of adr.alternatives) {
-            lines.push(`- **${alt.option}**`)
-            if (alt.pros.length) lines.push(`  - Pros: ${alt.pros.join(', ')}`)
-            if (alt.cons.length) lines.push(`  - Cons: ${alt.cons.join(', ')}`)
+            adrLines.push(`- **${alt.option}**`)
+            if (alt.pros.length) adrLines.push(`  - Pros: ${alt.pros.join(', ')}`)
+            if (alt.cons.length) adrLines.push(`  - Cons: ${alt.cons.join(', ')}`)
           }
-          lines.push('')
+          adrLines.push('')
         }
         if (adr.consequences_positive.length)
-          lines.push(`**Positive consequences:**\n${adr.consequences_positive.map(c => `- ${c}`).join('\n')}\n`)
+          adrLines.push(`**Positive consequences:**\n${adr.consequences_positive.map(c => `- ${c}`).join('\n')}\n`)
         if (adr.consequences_negative.length)
-          lines.push(`**Negative consequences:**\n${adr.consequences_negative.map(c => `- ${c}`).join('\n')}\n`)
+          adrLines.push(`**Negative consequences:**\n${adr.consequences_negative.map(c => `- ${c}`).join('\n')}\n`)
+      }
+      folder.file('adrs.md', adrLines.join('\n'))
+    }
+
+    // ── diagrams/ ─────────────────────────────────────────────────────────────
+    if (hld.diagrams.length > 0) {
+      const diagramsFolder = folder.folder('diagrams')!
+      for (const diagram of hld.diagrams) {
+        const title    = (diagram.title || diagram.level).replace(/[^a-z0-9]/gi, '_').toLowerCase()
+        const lines: string[] = []
+        if (diagram.mermaid_syntax) {
+          lines.push(diagram.mermaid_syntax)
+        } else if (diagram.nodes.length > 0) {
+          lines.push('C4Context')
+          for (const node of diagram.nodes) {
+            lines.push(`  ${node.type}(${node.id}, "${node.label}", "${node.description ?? ''}")`)
+          }
+          for (const rel of diagram.relationships) {
+            const from = rel.from_id || rel.from || ''
+            const to   = rel.to_id   || rel.to   || ''
+            lines.push(`  Rel(${from}, ${to}, "${rel.label ?? ''}")`)
+          }
+        }
+        if (lines.length > 0) {
+          diagramsFolder.file(`${title}.mmd`, lines.join('\n'))
+        }
       }
     }
-    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' })
+
+    const blob = await zip.generateAsync({ type: 'blob' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
     a.href     = url
-    a.download = `${hld.project_name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_hld.md`
+    a.download = `${slug}.zip`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -454,10 +494,16 @@ export function HLDOutput({
         </button>
 
         {/* Center: pill tabs */}
-        <nav className={styles.tabGroup} role="tablist" aria-label="HLD view">
-          <TabButton id="tab-document" active={activeView === 'document'} icon={<FileText size={13} />} label="Document" onClick={() => setView('document')} />
-          <TabButton id="tab-diagram" active={activeView === 'diagram'} icon={<GitBranch size={13} />} label="Diagram" onClick={() => setView('diagram')} />
-          <TabButton id="tab-adrs" active={activeView === 'adrs'} icon={<BookMarked size={13} />} label={`ADRs${hld.adrs.length > 0 ? ` (${hld.adrs.length})` : ''}`} onClick={() => setView('adrs')} />
+        <nav className={styles.tabGroup} role="tablist" aria-label="Document view">
+          {(track !== 'functional' || erdTab === 'technical') && <>
+            <TabButton id="tab-document" active={activeView === 'document'} icon={<FileText size={13} />} label="Document" onClick={() => setView('document')} />
+            <TabButton id="tab-diagram" active={activeView === 'diagram'} icon={<GitBranch size={13} />} label="Diagram" onClick={() => setView('diagram')} />
+            <TabButton id="tab-adrs" active={activeView === 'adrs'} icon={<BookMarked size={13} />} label={`ADRs${hld.adrs.length > 0 ? ` (${hld.adrs.length})` : ''}`} onClick={() => setView('adrs')} />
+          </>}
+          {(track === 'functional' || (track === 'both' && erdTab === 'functional')) && <>
+            <TabButton id="tab-user-journeys" active={activeView === 'user-journeys'} icon={<FileText size={13} />} label="User Journeys" onClick={() => setView('user-journeys')} />
+            <TabButton id="tab-business-rules" active={activeView === 'business-rules'} icon={<BookMarked size={13} />} label="Business Rules" onClick={() => setView('business-rules')} />
+          </>}
         </nav>
 
         {/* Right: save indicator + chat + submit + export + inbox toggle */}
@@ -510,11 +556,24 @@ export function HLDOutput({
         {activeView === 'document' && (
           <aside className={styles.navPanel} aria-label="Section navigation">
             <div className={styles.navProject}>
-              <span className={styles.navTemplateBadge}>{hld.template}</span>
-              <h1 className={styles.navProjectName}>{hld.project_name}</h1>
-              <p className={styles.navProjectMeta}>
-                {hld.sections.length} sections · {hld.adrs.length} ADRs
-              </p>
+              {track === 'both' ? (
+                <select
+                  className={styles.erdDropdown}
+                  value={erdTab}
+                  onChange={e => {
+                    setErdTab(e.target.value as ErdTab)
+                    setView('document')
+                  }}
+                  aria-label="Switch ERD track"
+                >
+                  <option value="technical">Technical — Enriched Requirements Document</option>
+                  <option value="functional">Functional — Enriched Requirements Document</option>
+                </select>
+              ) : (
+                <span className={styles.navTemplateBadge}>
+                  {track === 'functional' ? 'Functional — Enriched Requirements Document' : hld.template}
+                </span>
+              )}
             </div>
             <nav className={styles.navSectionList} aria-label="Sections">
               {hld.sections.map(s => (
@@ -570,6 +629,20 @@ export function HLDOutput({
                   }
                 }}
               />
+            </div>
+          )}
+          {activeView === 'user-journeys' && (
+            <div className={styles.placeholderPanel}>
+              <div className={styles.placeholderIcon}><FileText size={32} /></div>
+              <h3 className={styles.placeholderTitle}>User Journeys</h3>
+              <p className={styles.placeholderSub}>Functional user journey maps will appear here — coming soon.</p>
+            </div>
+          )}
+          {activeView === 'business-rules' && (
+            <div className={styles.placeholderPanel}>
+              <div className={styles.placeholderIcon}><BookMarked size={32} /></div>
+              <h3 className={styles.placeholderTitle}>Business Rules</h3>
+              <p className={styles.placeholderSub}>Extracted business rules and acceptance criteria will appear here — coming soon.</p>
             </div>
           )}
         </main>

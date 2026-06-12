@@ -132,6 +132,43 @@
   color: #1e40af;
 }
 
+/* ERD track tabs — above the view tabs when track = both */
+.tabGroupWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.erdTabGroup {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--color-surface-2);
+}
+
+.erdTab {
+  padding: 4px 14px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+.erdTab:hover:not(.erdTabActive) { color: var(--color-text); }
+.erdTabActive {
+  background: var(--color-primary);
+  color: #fff;
+}
+
 /* Pill tab group — center column */
 .tabGroup {
   display: flex;
@@ -244,6 +281,27 @@
   padding: 2px 8px;
   border-radius: 99px;
   margin-bottom: 8px;
+}
+
+/* ERD track dropdown — shown in nav panel when track = both */
+.erdDropdown {
+  display: block;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-primary-deep);
+  background: var(--color-primary-light);
+  border: 1.5px solid var(--color-primary-muted);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  appearance: auto;
+  box-shadow: var(--shadow-sm);
+  white-space: normal;
+  word-break: break-word;
+  height: auto;
 }
 
 .navProjectName {
@@ -468,6 +526,21 @@
 
 .docScroll   { flex: 1; overflow-y: auto; }
 .adrWrap     { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+
+.placeholderPanel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-12);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+.placeholderIcon { color: var(--color-primary-muted); }
+.placeholderTitle { font-size: 18px; font-weight: 700; color: var(--color-text); margin: 0; }
+.placeholderSub   { font-size: 13px; color: var(--color-text-secondary); max-width: 320px; margin: 0; }
 .diagramWrap { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 
 /* ── Error state ── */

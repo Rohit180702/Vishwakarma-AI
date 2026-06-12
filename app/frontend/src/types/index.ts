@@ -1,6 +1,8 @@
 // All shared TypeScript types — mirroring the backend domain models.
 
-export type HLDTemplate = 'arc42' | 'c4-adr' | 'rfc-design-doc' | 'custom'
+export type Track = 'technical' | 'functional' | 'both'
+
+export type HLDTemplate = 'arc42' | 'c4-adr' | 'rfc-design-doc' | 'custom' | 'brd' | 'user-story-map'
 export type DiagramLevel = 'context' | 'container' | 'component' | 'sequence' | 'deployment'
 
 export type C4NodeType =
@@ -81,6 +83,7 @@ export interface C4Diagram {
 export interface HLDDocument {
   project_name: string
   template: HLDTemplate
+  track?: Track
   sections: HLDSection[]
   adrs: ADR[]
   diagrams: C4Diagram[]
@@ -174,6 +177,37 @@ export interface LoginResponse {
   token_type: string
   user: User
 }
+
+// ---------------------------------------------------------------------------
+// Track (document generation mode)
+// ---------------------------------------------------------------------------
+export type Track = 'technical' | 'functional' | 'both'
+
+export const FUNCTIONAL_FRAMEWORK_OPTIONS: FrameworkOption[] = [
+  {
+    id: 'brd',
+    name: 'BRD',
+    standard: 'Business Requirements Document',
+    description: 'The standard enterprise BA document — business objectives, stakeholder needs, scope, use cases, and acceptance criteria.',
+    section_count: 8,
+    good_for: ['Enterprise BAs', 'Stakeholders', 'Project sponsors'],
+    default_sections: [
+      'Executive Summary', 'Business Objectives', 'Scope', 'Stakeholders',
+      'Business Requirements', 'Use Cases', 'Assumptions & Constraints', 'Glossary',
+    ],
+  },
+  {
+    id: 'user-story-map',
+    name: 'User Story Map',
+    standard: 'Jeff Patton — User Story Mapping',
+    description: 'Agile BA format — user journeys broken into epics, stories, and acceptance criteria. Built for sprint planning and delivery teams.',
+    section_count: 5,
+    good_for: ['Agile BAs', 'Product squads', 'Sprint planning'],
+    default_sections: [
+      'Product Vision', 'User Personas', 'User Journeys', 'User Stories & Epics', 'Acceptance Criteria',
+    ],
+  },
+]
 
 export const FRAMEWORK_OPTIONS: FrameworkOption[] = [
   {

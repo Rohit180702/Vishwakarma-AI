@@ -2,8 +2,8 @@ import { useCallback, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { Button } from '@/components/Button'
-import type { HLDTemplate, Section } from '@/types'
-import { FRAMEWORK_OPTIONS } from '@/types'
+import type { HLDTemplate, Section, Track } from '@/types'
+import { FRAMEWORK_OPTIONS, FUNCTIONAL_FRAMEWORK_OPTIONS } from '@/types'
 import { TemplateCard, type CardOption } from './TemplateCard'
 import { SectionEditor } from './SectionEditor'
 import styles from './FormatSelection.module.css'
@@ -11,6 +11,7 @@ import styles from './FormatSelection.module.css'
 interface FormatSelectionProps {
   onSelected: (template: HLDTemplate, sections: Section[], thoughtworksMode: boolean) => void
   onBack?: () => void
+  track?: Track
 }
 
 const CUSTOM_OPTION = {
@@ -23,12 +24,17 @@ const CUSTOM_OPTION = {
   default_sections: ['Overview', 'Architecture', 'Decisions', 'Risks'],
 }
 
-const ALL_OPTIONS: CardOption[] = [
-  ...FRAMEWORK_OPTIONS.map((o, i) => ({ ...o, index: i, default_sections: o.default_sections ?? [] })),
-  { ...CUSTOM_OPTION, index: FRAMEWORK_OPTIONS.length },
-]
+export function FormatSelection({ onSelected, onBack, track = 'technical' }: FormatSelectionProps) {
+  const technicalOptions: CardOption[] = [
+    ...FRAMEWORK_OPTIONS.map((o, i) => ({ ...o, index: i, default_sections: o.default_sections ?? [] })),
+    { ...CUSTOM_OPTION, index: FRAMEWORK_OPTIONS.length },
+  ]
+  const functionalOptions: CardOption[] = FUNCTIONAL_FRAMEWORK_OPTIONS.map((o, i) => ({
+    ...o, index: i, default_sections: o.default_sections ?? [],
+  }))
 
-export function FormatSelection({ onSelected, onBack }: FormatSelectionProps) {
+  const showTechnical = track === 'technical' || track === 'both'
+  const showFunctional = track === 'functional' || track === 'both'
   const [selected, setSelected]           = useState<HLDTemplate | null>(null)
   const [sections, setSections]           = useState<Section[]>([])
   const gridRef = useRef<HTMLDivElement>(null)
@@ -59,7 +65,11 @@ export function FormatSelection({ onSelected, onBack }: FormatSelectionProps) {
     cards[nextIdx]?.focus()
   }
 
-  const selectedOption = ALL_OPTIONS.find(o => o.id === selected)
+  const allDisplayedOptions = [
+    ...(showTechnical ? technicalOptions : []),
+    ...(showFunctional ? functionalOptions : []),
+  ]
+  const selectedOption = allDisplayedOptions.find(o => o.id === selected)
   const isReady = selected !== null && sections.length > 0
 
   return (
@@ -74,23 +84,49 @@ export function FormatSelection({ onSelected, onBack }: FormatSelectionProps) {
               Pick the framework that fits your team. Click to customise sections.
             </p>
 
-            <div
-              ref={gridRef}
-              role="radiogroup"
-              aria-label="Document framework"
-              className={styles.grid}
-              onKeyDown={handleGridKeyDown}
-            >
-              {ALL_OPTIONS.map((opt, i) => (
-                <TemplateCard
-                  key={opt.id}
-                  opt={opt}
-                  isPicked={selected === opt.id}
-                  isFocusable={selected ? selected === opt.id : i === 0}
-                  onPick={() => pickTemplate(opt.id, opt.default_sections ?? [])}
-                />
-              ))}
-            </div>
+            {showTechnical && (
+              <>
+                {track === 'both' && <p className={styles.trackGroupLabel}>Enriched Requirements Document — Technical</p>}
+                <div
+                  ref={gridRef}
+                  role="radiogroup"
+                  aria-label="Technical framework"
+                  className={styles.grid}
+                  onKeyDown={handleGridKeyDown}
+                >
+                  {technicalOptions.map((opt, i) => (
+                    <TemplateCard
+                      key={opt.id}
+                      opt={opt}
+                      isPicked={selected === opt.id}
+                      isFocusable={selected ? selected === opt.id : i === 0}
+                      onPick={() => pickTemplate(opt.id, opt.default_sections ?? [])}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+
+            {showFunctional && (
+              <>
+                {track === 'both' && <p className={styles.trackGroupLabel}>Enriched Requirements Document — Functional</p>}
+                <div
+                  role="radiogroup"
+                  aria-label="Functional framework"
+                  className={styles.grid}
+                >
+                  {functionalOptions.map((opt, i) => (
+                    <TemplateCard
+                      key={opt.id}
+                      opt={opt}
+                      isPicked={selected === opt.id}
+                      isFocusable={selected ? selected === opt.id : i === 0}
+                      onPick={() => pickTemplate(opt.id, opt.default_sections ?? [])}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
 
           </div>
         </div>
