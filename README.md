@@ -1,89 +1,96 @@
 # Vishwakarma
 
-> *The AI that interrogates your requirements before your architects have to.*
+> *From requirements that get interpreted — to requirements that get interrogated.*
 
-**A Requirements Enrichment Platform that transforms ambiguous business language into traceable, reviewed, and approved architectural decisions — before a single line of code is written.**
+**A Requirements Enrichment Platform — one ambiguous requirements document in, one standards-backed Enriched Requirements Document (ERD) out. Technical track for architects today. Functional track for business analysts in Phase 2. One interrogation. Two consistent delivery artifacts. Your entire delivery team covered from a single source of truth.**
 
 *[Setup Guide](SETUP.md) · [Report Issues](https://github.com/rohit18-tw/vishwakarma/issues)*
 
+## Quick Start
+
+Full setup in **[SETUP.md](SETUP.md)**.
+
+```bash
+# 1. Start the database layer
+docker compose up -d
+
+# 2. Configure and start the backend
+cd app/backend && pip install -e .
+# Add ANTHROPIC_API_KEY to .env
+cd .. && ./start-backend.sh
+
+# 3. Start the frontend
+cd app/frontend && npm install && npm run dev
+
+# → http://localhost:5173
+```
+
+> **Built on the AI/Works lifecycle.** We started with the [AI/Works technical guide](https://www.thoughtworks.com/ai/works/technical-guide) and every component, diagram, and roadmap stage on the platform microsite. Stage one of the lifecycle names *Requirements Capture and Enrichment* — but does not supply the governance layer, document standards, or human sign-off workflow that make enriched requirements trustworthy before they feed Dynamic Spec. Vishwakarma builds exactly that layer.
+
 ---
 
-## At a Glance
+## Quick Summary
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| 🔍 **Requirements Interrogation** | 🎯 **Architecture Interview** | 🔁 **GitHub-Style Review & Approval** | ⚡ **AI/Works Integration** |
-| Detects all quality attributes with source citations and confidence scores | Resolves every open architectural decision — scored, ranked, recorded in a Decision Ledger | Section-level threaded comments, version snapshots, structured sign-off — the PR model for architecture | Feeds a validated, approved ERD directly into Dynamic Spec — no ambiguity inherited |
+### The Problem
+
+The AI/Works lifecycle defines Requirements Capture and Enrichment as stage one — *"structuring requirements so they can be enriched and executed by the platform."* What it does not define is how: no document standard, no decision record, no structured sign-off before raw client requirements feed into Dynamic Spec and downstream agents. Ambiguous requirements don't fail at requirements time — they fail months later, in UAT or production, once the architectural options have narrowed and the cost has compounded.
+
+#### The Industry Evidence
+
+| Finding | Source |
+|---|---|
+| **47%** of unsuccessful projects fail to meet goals due to inaccurate requirements management | PMI — Pulse of the Profession |
+| Requirements defects cost up to **100×** more to fix in production than at definition | IBM Systems Sciences Institute |
+| Incomplete requirements — the **#1 factor** in impaired projects | Standish Group — CHAOS Report |
+
+### The Solution
+
+Upload the document. Choose the track — Technical, Functional, or Both. Vishwakarma runs it through four stages:
+
+1. **Enrich** — every architecture characteristic surfaced with a confidence score and the exact source sentence that implies it. The architect confirms and ranks them. An architecture interview resolves every open decision — each option scored against the confirmed priorities. Every choice lands in an append-only **Decision Ledger**.
+2. **Generate** — the complete **ERD-Technical** (arc42 v9 · C4+ADR · RFC) streamed live, grounded in the characteristics and decisions recorded above. The **ERD-Functional** (BRD · FRD · User Story Map) follows the same pipeline for business analysts. *(Phase 2)*
+3. **Visualise** — ask the architecture any question in plain English. The platform surfaces the answer step by step — each hop highlighting the component, the protocol, and the handoff. Step through it manually or enable simulation and watch the full flow animate across the live C4 diagram. This is how you run a stakeholder design review, onboard a new engineer, or walk a client through a scenario — directly from the generated architecture, no preparation required.
+4. **Sign off** — GitHub-style inline comments anchored to specific sections, version history, and structured approval by both business and technical reviewers before any design is committed or code is written.
+
+One pipeline. Two role-appropriate delivery artifacts. Every prompt rule, schema field, and generated document section enforces a named Thoughtworks engineering principle — ADRs, Architecture Advice Process, Evolutionary Architecture, DDD, Conway's Law, C4 Model, OpenTelemetry. See [Section 4](#4-innovation--novelty) for the full breakdown.
+
+![Generated Technical ERD — Document View with Sections](images/image-12.png)
+
+### The Impact
+
+| | Today | With Vishwakarma |
+|---|---|---|
+| Traceable architecture artifact | Weeks of workshops and authoring | A single focused session |
+| Decision rationale | Email threads and tribal knowledge | Decision Ledger — every choice, alternative, and trade-off recorded |
+| Review cycle | Weeks per email-and-revise round | Inline comments → versioned approval, same session |
+| Documentation standard | Whatever the author knows | arc42 v9 · C4 · ADR — enforced by the engine |
+
+### AI/Works Integration
+
+**Requirements Capture and Enrichment** is stage one of the [AI/Works delivery lifecycle](https://www.thoughtworks.com/ai/works/technical-guide). Vishwakarma is purpose-built for that stage. Instead of Dynamic Spec inheriting raw client documents with every ambiguity intact, what reaches it is a structured, validated, approved ERD — every quality attribute ranked, every decision recorded, signed off by both business and technical users.
+
+The vision extends further: if the generated Super Spec were run back through the same pipeline — compared against the signed-off ERD — you would have end-to-end validation before and after generation, by the same users who approved the requirements. That is the story we are proposing for how AI/Works could close the loop. We are not the owners of Dynamic Spec. See [Section 2](#2-aiworks-ecosystem-integration) for the full diagram.
+
+> **Better input. Better spec. Better code.**
 
 ---
 
 ## Table of Contents
 
-1. [The Problem We Are Solving](#1-the-problem-we-are-solving)
-2. [What Vishwakarma Brings](#2-what-vishwakarma-brings)
-3. [AI/Works Ecosystem Integration](#3-aiworks-ecosystem-integration)
-4. [Business Impact](#4-business-impact)
-5. [Innovation & Novelty](#5-innovation--novelty)
-6. [Technical / Functional Flow](#6-technical--functional-flow)
-7. [Enriched Requirements Documents (ERDs)](#7-enriched-requirements-documents-erds)
-8. [Design Principles & Intellectual Foundation](#8-design-principles--intellectual-foundation)
-9. [Platform Capabilities — What Is Built Today](#9-platform-capabilities--what-is-built-today)
-10. [Responsible AI](#10-responsible-ai)
-11. [Technology Stack](#11-technology-stack)
-12. [Visual Walkthrough](#12-visual-walkthrough)
-13. [Quick Start](#13-quick-start)
-14. [References](#14-references)
+1. [What Vishwakarma Brings](#1-what-vishwakarma-brings)
+2. [AI/Works Ecosystem Integration](#2-aiworks-ecosystem-integration)
+3. [Business Impact](#3-business-impact)
+4. [Innovation & Novelty](#4-innovation--novelty)
+5. [Enriched Requirements Documents (ERDs)](#5-enriched-requirements-documents-erds)
+6. [Platform Capabilities — What Is Built Today](#6-platform-capabilities--what-is-built-today)
+7. [Responsible AI](#7-responsible-ai)
+8. [Technology Stack](#8-technology-stack)
+9. [Visual Walkthrough](#9-visual-walkthrough)
+10. [References](#10-references)
 
 ---
 
-## 1. The Problem We Are Solving
-
-**Architecture fails before it begins — and the industry has accepted this as normal.**
-
-Every software project starts with a requirements document. It is handed to an architect with the instruction to *"go figure it out."* That document — almost without exception — is broken in the same ways, at the same cost, on every project.
-
-### The Four Compounding Failures
-
-**① Ambiguous Non-Functional Requirements**
-
-*"The system must be fast."* *"It must be secure."* *"It should scale."*
-
-These are not requirements. They have no threshold, no priority, no acceptance criterion. When a requirement cannot be measured, it cannot be verified — and it cannot be built correctly. Architects fill the void with assumptions. Those assumptions become design decisions. Those design decisions become constraints baked into code. **They compound invisibly — until production.**
-
-> IBM Systems Sciences Institute quantified the cost: defects introduced during requirements definition cost **up to 100× more to fix in production** than at the point of definition.
-
-**② Decisions Made Without Records**
-
-Why PostgreSQL over MongoDB? Why a monolith over microservices? Why this deployment topology? When the architect who made those calls leaves the team, **the rationale disappears with them.** The next team inherits constraints with no context, rediscovers decisions that were already made, and rebuilds understanding that existed — at full cost, from zero.
-
-**③ No Documentation Standard**
-
-arc42, C4 Model, ADRs — these are globally recognised, industry-proven architecture documentation frameworks. Most teams produce architecture in free-form prose, whiteboards, and slide decks. Every architect translates requirements into structure differently. The output quality varies entirely by the individual. **There is no enforced standard, no repeatable process, and no shared vocabulary between roles.**
-
-**④ Architecture Reviews Are Broken**
-
-Email the PDF → wait days for feedback → comment in a separate document → revise → re-send → repeat. No version history. No approval trail. No traceability between a comment and the revision it triggered. No record of who approved what and when. **Weeks are lost per cycle. Nothing is auditable.**
-
----
-
-### What This Costs
-
-| Failure | Consequence at Delivery Time |
-|---|---|
-| Ambiguous NFRs interpreted differently by each role | Architect, BA, and product manager arrive at different systems — misalignment surfaces in code weeks later |
-| No recorded trade-offs | Rework without context — teams can't distinguish intentional design from accumulated accident |
-| No documentation standard | Architecture quality is a function of the individual author, not the process |
-| No approval trail | Regulatory audits, post-incident reviews, and team handovers require email archaeology |
-
-> **This is not a tooling problem. It is a requirements quality problem.**
-
-Teams build on assumptions — not on validated architectural intent. The cost doesn't appear in requirements. It appears months later, in rework, at the worst possible time, with the fewest architectural options remaining.
-
-**Vishwakarma intervenes at the cheapest possible moment — before any architecture is designed or any code is written.**
-
----
-
-## 2. What Vishwakarma Brings
+## 1. What Vishwakarma Brings
 
 **Vishwakarma is a Requirements Enrichment Platform.** Before a single architecture section is written, it reads the requirements document the way an experienced architect would — critically. It surfaces every quality attribute buried in business prose, exposes every unresolved trade-off, and walks the architect through every open decision with scored options and explicit consequences. Nothing is assumed. Nothing is glossed over.
 
@@ -93,7 +100,7 @@ What comes out is not a generated document. It is a structured, traceable record
 
 ---
 
-### Four Capabilities That Set It Apart
+### The Capabilities That Set It Apart
 
 ---
 
@@ -129,6 +136,21 @@ Every selection is appended to the **Decision Ledger** — an append-only struct
 
 ---
 
+#### 🎬 Live Visualisation & Presentation Mode — *See. Query. Present.*
+
+The generated C4 diagrams — Context, Container, Component — are not static outputs. They are live, queryable, and presentation-ready from the moment they are generated.
+
+Ask any question in plain English: *"What happens when a payment fails?"* The platform responds step by step — each component highlighted, each protocol named, each handoff shown in sequence. Step through it manually or enable simulation and watch the full flow animate across the live diagram.
+
+This is bigger than one question. This is how you:
+- Walk stakeholders through a design review without a whiteboard
+- Onboard a new engineer without a slide deck
+- Surface failure behaviour at design time — before a single customer is affected
+
+Step through it, pause it, present it full-screen. The architecture doesn't just answer questions — it presents itself.
+
+---
+
 #### 🔁 GitHub-Style Inline Review & Approval — *The PR Model for Architecture*
 
 **Architecture is the only engineering discipline where decisions are routinely made without a traceable record.** Code has Git. Infrastructure has Terraform state. Architecture has email threads — or nothing.
@@ -137,31 +159,24 @@ Vishwakarma brings the pull request review model to architecture documentation:
 
 - **Inline section-level commenting** — reviewers comment on the specific section they are challenging, not the document as a whole
 - **Threaded comments** — replies, resolutions, and re-openings tracked; every comment anchored to the ERD version it references
-- **Structured approval lifecycle**:
-
-  ```
-  Draft → Submitted for Review → In Review → Changes Requested → Approved
-  ```
-
+- **Structured approval lifecycle**: `Draft → Submitted for Review → In Review → Changes Requested → Approved`
 - **Version tracking on every ERD** — every generation, edit, and AI-assisted revision creates a named version snapshot; versions are comparable
-- **Approval stamped** with reviewer attribution, version, and timestamp — if the ERD is revised after approval, the prior approval is preserved and a new review cycle begins
+- **Approval stamped** with reviewer attribution, version, and timestamp
 - **Change history as a first-class artifact** — AI-generated changes attributed to the model with the triggering prompt; human edits attributed to the author
 
-Architecture is now reviewable, versioned, approvable, and committable to source control — alongside the code it informs.
+An unvalidated architecture is an opinion with formatting. One click routes the document to named reviewers — versioned, tracked, awaiting verdict. The reviewer sees the diagram, the ADRs, and can query the architecture directly before signing off. Complete lineage, from first upload to final sign-off. Nobody asks "why did we build it this way" again.
 
 ---
 
 #### ⚡ AI/Works Integration — *The Upstream Intelligence Layer*
 
-> See [Section 3](#3-aiworks-ecosystem-integration) for the full integration diagram.
+> See [Section 2](#2-aiworks-ecosystem-integration) for the full integration diagram.
 
 The entire enrichment pipeline — interrogated characteristics, resolved decisions, approved ERD — is structured specifically to serve as the **validated handoff contract into Dynamic Spec**. Dynamic Spec no longer inherits ambiguity. It receives architecture that has already been interrogated, decided, reviewed, and approved.
 
 ---
 
 ### The Two Delivery Artifacts — Enriched Requirements Documents (ERDs)
-
-**Vishwakarma doesn't produce summaries or template fills.** It produces **Enriched Requirements Documents (ERDs)** — structured, traceable, version-stamped delivery artifacts where every element traces back to a confirmed characteristic and a Decision Ledger entry.
 
 | Artifact | Audience | Standard | Status |
 |---|---|---|---|
@@ -172,7 +187,7 @@ One pipeline. Two role-appropriate delivery artifacts. The misalignment that nor
 
 ---
 
-## 3. AI/Works Ecosystem Integration
+## 2. AI/Works Ecosystem Integration
 
 > **Vishwakarma is the upstream intelligence layer in the AI/Works delivery chain.**
 
@@ -182,34 +197,30 @@ Vishwakarma removes that constraint. The output of the enrichment pipeline is no
 
 ```mermaid
 flowchart TD
-    REQ["📄 Requirements Document\nPDF · DOCX · Markdown · Plain Text"]
+    REQ["Requirements Document\nPDF, DOCX, Markdown, Plain Text"]
+    REQ --> IE
 
-    REQ --> VISH
-
-    subgraph VISH["VISHWAKARMA — Requirements Enrichment Platform"]
-        direction TB
-        IE["🔍 Requirements Interrogation Engine\nCharacteristics detected · Cited · Priority-ranked by architect"]
-        AI["🎯 Architecture Interview\nDecisions resolved against the confirmed priority order"]
-        DL["📋 Decision Ledger\nEvery choice recorded — what, why, and alternatives considered"]
-        RV["✅ Inline Review · Versioning · Approval\nERD reviewed, versioned, and approved before handoff"]
-        IE --> AI --> DL --> RV
+    subgraph VISH["VISHWAKARMA - Requirements Enrichment Platform"]
+        IE["Requirements Interrogation Engine\nCharacteristics detected, cited, priority-ranked by architect"]
+        INT["Architecture Interview\nDecisions resolved against the confirmed priority order"]
+        DL["Decision Ledger\nEvery choice recorded, why, and alternatives considered"]
+        RV["Inline Review, Versioning and Approval\nERD reviewed, versioned, and approved before handoff"]
+        IE --> INT --> DL --> RV
     end
 
-    RV --> ERDT["📘 ERD-Technical\narc42 · C4+ADR · RFC · Custom\n✅ Phase 1 — Built"]
-    RV --> ERDF["📗 ERD-Functional\nBusiness-aligned · Plain English\n🔄 Phase 2"]
+    RV --> ERDT["ERD-Technical\narc42, C4 and ADR, RFC, Custom\nPhase 1 - Built"]
+    RV --> ERDF["ERD-Functional\nBusiness-aligned, Plain English\nPhase 2"]
 
-    ERDT --> HAND
+    ERDT --> HAND["Structured, Validated, Approved ERD\nThe structured handoff contract into AI/Works"]
     ERDF --> HAND
-
-    HAND(["🤝 Structured · Validated · Approved ERD\nThe structured handoff contract into AI/Works"])
 
     HAND -->|"feeds structured context into"| DS
 
-    subgraph DS["AI/WORKS — DYNAMIC SPEC  ⚡ Spec Generation Engine"]
-        DSI["Discovery module receives a validated ERD\nEvery quality attribute ranked · Every decision recorded\nNo ambiguity inherited · No gaps to guess at"]
+    subgraph DS["AI/WORKS - DYNAMIC SPEC - Spec Generation Engine"]
+        DSI["Validated ERD received\nEvery quality attribute ranked, every decision recorded\nNo ambiguity inherited"]
     end
 
-    DS --> EXEC["🚀 Code Generation · Agent Pipelines · Delivery Execution\n— AI/Works Delivery Chain —"]
+    DS --> EXEC["Code Generation, Agent Pipelines, Delivery Execution\nAI/Works Delivery Chain"]
 
     style HAND fill:#1b4332,color:#d8f3dc,stroke:#52b788,stroke-width:3px
     style EXEC fill:#1c3a5e,color:#dbeafe,stroke:#3b82f6,stroke-width:2px
@@ -226,21 +237,19 @@ When Dynamic Spec consumes a Vishwakarma ERD, it receives a document that has al
 
 ---
 
-## 4. Business Impact
+## 3. Business Impact
 
-**Requirements quality is a business problem, not an engineering problem.** Every ambiguous requirement, every unstated constraint, every unrecorded trade-off is not a documentation gap — it is a deferred cost that will surface later, at a higher price, with fewer architectural options remaining.
-
-**Vishwakarma intervenes at the cheapest possible moment.**
+**Requirements quality is a business problem, not an engineering problem.** Every ambiguous requirement, every unstated constraint, every unrecorded trade-off is a deferred cost that will surface later, at a higher price, with fewer architectural options remaining.
 
 ### Quantified Impact
 
 | Metric | Without Vishwakarma | With Vishwakarma |
 |---|---|---|
-| Time to traceable architecture artifact | 3–6 weeks of workshops and authoring | 20–40 minutes |
+| Time to traceable architecture artifact | Weeks of workshops and authoring | A single focused session |
 | Quality attribute coverage | Whatever the architect remembers | Every detectable characteristic, each with source evidence and confidence score |
 | Decision traceability | Meeting notes, email threads, tribal knowledge | Decision Ledger — every choice, rationale, and alternative recorded |
 | Stakeholder alignment | Multiple mental models, resolved through workshops | Single interrogated source of truth |
-| Architecture review cycle | 1–2 weeks per email-and-revise cycle | Inline comments → approval → versioned sign-off — same session |
+| Architecture review cycle | Weeks per email-and-revise cycle | Inline comments → approval → versioned sign-off — same session |
 | Documentation standards | Varies by author skill and available time | arc42 v9 · C4 Model · ADR — enforced by the engine |
 | ERD version and approval history | Non-existent | Full version history + approval trail committed to source control |
 | Downstream AI agent quality | Constrained by raw, ambiguous input | Structured, validated, approved ERD as input |
@@ -251,7 +260,7 @@ Every unresolved requirement becomes an assumption. Every assumption becomes a c
 
 ### Organisational Governance Impact
 
-Traditional Architecture Review Boards are slow, centralised, and — as Thoughtworks Architecture Advice Process research confirms — **correlated with low organisational performance**. Vishwakarma's versioned ERD with inline review and approval is the infrastructure that makes decentralised architectural governance safe: teams decide, the Decision Ledger captures it, the approval workflow validates it. Architecture Review Boards become unnecessary — not because governance was removed, but because it was made continuous, lightweight, and embedded in delivery.
+Traditional Architecture Review Boards are slow, centralised, and — as Thoughtworks Architecture Advice Process research confirms — **correlated with low organisational performance**. Vishwakarma's versioned ERD with inline review and approval is the infrastructure that makes decentralised architectural governance safe: teams decide, the Decision Ledger captures it, the approval workflow validates it.
 
 ### Architectural Review Tracking — The Business Case
 
@@ -265,144 +274,30 @@ Traditional Architecture Review Boards are slow, centralised, and — as Thought
 
 ---
 
-## 5. Innovation & Novelty
+## 4. Innovation & Novelty
 
-**Business impact is the core ideology.** Requirements quality is not a documentation concern — it is a delivery cost driver. IBM Systems Sciences Institute: defects introduced during requirements definition cost **up to 100× more to fix in production** than at the point of definition. Vishwakarma cuts that cost by making decisions explicit before they become assumptions baked into code.
+**Business impact is the core ideology.** Requirements quality is not a documentation concern — it is a delivery cost driver. Vishwakarma cuts that cost by making decisions explicit before they become assumptions baked into code.
 
 ### Built on Thoughtworks Engineering Principles
 
 Vishwakarma is not built on novel ideas in isolation — it is built on **industry-proven Thoughtworks principles**, applied systematically at the point where they have been most absent: requirements time. These are not references added for credibility. They are enforcement rules baked into every prompt, every schema field, and every generated document section.
 
-| Principle | Thoughtworks Source | How Vishwakarma Enforces It |
-|---|---|---|
-| **Architecture Advice Process** | Tech Radar Vol. 32, April 2025 — Trial | Inline review + approval workflow replaces Architecture Review Boards with continuous, decentralised governance |
-| **Lightweight ADRs** | Tech Radar 2018 — Adopt | First-class output in every Technical ERD; noun-phrase titles, active-voice decisions, split consequences, immutable once accepted |
-| **Evolutionary Architecture & Fitness Functions** | Ford, Parsons, Kua, Sadalage — Thoughtworks/O'Reilly 2022 | Every measurable NFR must declare how it will be verified in CI/CD — enforced in arc42 Section 6 generation |
-| **Domain-Driven Design** | Martin Fowler — Bounded Context | arc42 Section 5 and C4 Container decomposition enforced by business capability, not technology layer |
-| **Team Topologies** | Skelton & Pais, 2nd ed. September 2025 | Every C4 container must identify its owning team type — stream-aligned, platform, enabling, complicated-subsystem |
-| **Conway's Law** | Martin Fowler | Team ownership check enforced in every C4 container diagram; mismatches surfaced as reviewer challenges |
-| **Technical Debt Quadrant** | Martin Fowler | arc42 Section 11 classifies debt as prudent-deliberate or reckless — not a flat inventory |
-| **Observability as Engineering Discipline** | Thoughtworks — OpenTelemetry (Adopt) | All three pillars — logs, metrics, traces — required in generated ERDs with a named approach |
+| Principle | Source | Reference | How Vishwakarma Enforces It |
+|---|---|---|---|
+| **Architecture Advice Process** | Thoughtworks Tech Radar Vol. 32, April 2025 — Trial | [architectural-decision-making.md](references/architectural-decision-making.md) | Inline review + approval workflow replaces Architecture Review Boards with continuous, decentralised governance |
+| **Lightweight ADRs** | Thoughtworks Tech Radar — Adopt (graduated) | [architectural-decision-making.md](references/architectural-decision-making.md) | First-class output in every Technical ERD; noun-phrase titles, active-voice decisions, split consequences, immutable once accepted |
+| **Evolutionary Architecture & Fitness Functions** | Ford, Parsons, Kua, Sadalage — Thoughtworks/O'Reilly 2022 | [evolutionary-architecture.md](references/evolutionary-architecture.md) | Every measurable NFR must declare how it will be verified in CI/CD — enforced in arc42 Section 6 generation |
+| **Domain-Driven Design & Bounded Context** | Martin Fowler — Thoughtworks Chief Scientist | [ddd-microservices-architectural-style.md](references/ddd-microservices-architectural-style.md) | arc42 Section 5 and C4 Container decomposition enforced by business capability, not technology layer |
+| **Conway's Law** | Martin Fowler — Thoughtworks | [conways-law-and-team-topologies.md](references/conways-law-and-team-topologies.md) | Team ownership check enforced in every C4 container diagram; mismatches surfaced as reviewer challenges |
+| **C4 Model** | Simon Brown — validated by Thoughtworks Tech Radar | [c4-model.md](references/c4-model.md) | Context, Container, Component diagrams with strict schema — element limits, protocol labels, Conway's Law check |
+| **Technical Debt Quadrant** | Martin Fowler — Thoughtworks | [legacy-modernisation-and-technical-debt.md](references/legacy-modernisation-and-technical-debt.md) | arc42 Section 11 classifies debt as prudent-deliberate or reckless — not a flat inventory |
+| **Observability — OpenTelemetry** | Thoughtworks Tech Radar — Adopt | [observability.md](references/observability.md) | All three pillars — logs, metrics, traces — required in generated ERDs with a named approach |
 
 > These are the principles that separate architecture that survives from architecture that gets rewritten.
 
 ---
 
-### 5.1 The Characteristics-to-Interview Pipeline
-
-*The structural differentiator that no amount of prompt engineering alone can replicate.*
-
-**Detect.** The Requirements Interrogation Engine scans the document and surfaces all detectable architecture characteristics — each with a confidence score and the exact source sentence that implies it.
-
-**Prioritise.** The architect reviews detected characteristics and **reorders them by priority**. This is the critical human signal:
-- *Customisable:* Add characteristics the engine missed; remove false positives
-- *Human-in-the-loop:* Nothing reaches the next stage without architect confirmation
-- *Priority-driven:* The ranked list — not the AI's assumption — governs the interview, the scoring, and the document
-
-**Interview.** Questions are generated specifically for the confirmed characteristics, in priority order. A security-first system gets authentication and data isolation questions before concurrency. A scalability-first system gets the reverse. The interview is different for every document.
-- *Suggestive:* Each question presents multiple approaches, scored against the confirmed ranking
-- *Customisable:* Every answer can be accepted, overridden with a custom response, or skipped
-- *Human-in-the-loop:* The system recommends the best fit; the architect always decides
-
-**Ledger.** Every selection is recorded in the **Decision Ledger** — an append-only structured record of what was chosen, what alternatives were considered, and why. No assumption reaches the final document without a ledger entry.
-
-> *"We interview the system, not the person."*
-
----
-
-### 5.2 Architectural Review Tracking with Version History & Approval
-
-**Architecture is the only engineering discipline where decisions are routinely made without a traceable record.** Code has Git. Infrastructure has Terraform state. Architecture has email threads — or nothing.
-
-Vishwakarma introduces **Architectural Review Tracking** as a first-class platform capability: every ERD is not just a document but a version-controlled, reviewable, approvable artifact. The complete history of how an architecture evolved — from first generation to final sign-off — is preserved, queryable, and exportable alongside the code it informed.
-
-Architecture reviews today: email the PDF → wait for feedback → revise → re-send → repeat. No version history. No approval record. Weeks per cycle.
-
-**Vishwakarma brings the pull request review model to architecture documentation.**
-
-**Inline section-level commenting**
-- Reviewers comment on the specific section, paragraph, or diagram they are challenging — not the document as a whole
-- Comments are threaded: replies, resolutions, and re-openings tracked
-- Every comment is anchored to the version of the ERD it references
-
-**Structured approval lifecycle**
-```
-Draft → Submitted for Review → In Review → Changes Requested → Approved
-```
-- Reviewers get a direct link to the specific ERD version — no email thread, no shared document
-- Approval is stamped with reviewer, version, and timestamp
-- If the ERD is revised after approval, the prior approval is preserved and a new review cycle begins
-
-**Version tracking on every ERD**
-- Every generation, every edit, and every AI-assisted revision creates a named version snapshot
-- Versions are comparable — see exactly what changed between v1 and v3 and which comment triggered each revision
-
-**Change history as a first-class artifact**
-- AI-generated changes attributed to the model with the triggering prompt
-- Human edits attributed to the author with a timestamp
-- Change log exportable and committable to source control alongside the code
-
----
-
-### 5.3 Live Presentation Mode for Architecture Diagrams
-
-*Eliminates the "export to PowerPoint" workflow entirely.*
-
-- **Progressive reveal:** C4 hierarchy presented level by level — Context, Container, Component — each revealed on a click, like a slide deck, without being a slide deck
-- **Live diagram queries during the session:** Stakeholders ask questions; the architect queries the diagram live and receives answers grounded in the generated architecture — in the room, not in a follow-up email
-- **No preparation overhead:** The reviewed, approved ERD *is* the presentation surface — no re-export, no re-format, no slide preparation
-
----
-
-## 6. Technical / Functional Flow
-
-Four stages. Each builds on the previous. Full traceability from the original requirements sentence to the final approved architecture document.
-
----
-
-### Stage 1 — Ingest
-
-Accepts **PDF, DOCX, Markdown, plain text, Confluence exports.** No pre-processing required.
-
-| Track | Audience | Output |
-|---|---|---|
-| **Technical** | Architects, engineers | arc42 · C4+ADR · RFC — C4 diagrams + ADRs |
-| **Functional** | Business analysts, product owners | Plain-English ERD with quality attribute mapping |
-| **Both** | Full delivery team | One pipeline run. Two complete delivery artifacts. |
-
----
-
-### Stage 2 — Requirements Interrogation Engine
-
-Surfaces all detectable architecture characteristics per document. Each includes:
-- **Confidence score** — derived from requirement density and linguistic weight
-- **Source sentence** — the exact line in the original document that implies it
-- **Architectural explanation** — why this characteristic matters for this system
-
-The architect reviews, adds missed characteristics, removes false positives, and **reorders by priority**. This ranked list — confirmed by a human — is the authoritative decision context for every subsequent stage.
-
----
-
-### Stage 3 — Architecture Interview
-
-Generates targeted questions for every open architectural decision — derived from confirmed characteristics in priority order. For each decision:
-- Multiple architectural approaches surfaced, scored against the confirmed priority ranking
-- Trade-offs shown explicitly before the architect chooses
-- Architect selects; system proposes best fit automatically but confirmation is always required
-- Custom answers accepted at any point; any question can be skipped
-- **Bulk accept** available — all recommended answers committed simultaneously when speed matters
-
-Every selection is appended to the **Decision Ledger** — append-only, no assumption reaches the document without a ledger entry.
-
----
-
-### Stage 4 — ERD Generation + Review + Approval
-
-The architect selects the documentation framework. The platform generates the complete ERD in real time — section by section via live streaming — grounded in confirmed characteristics and Decision Ledger entries. The ERD then enters the inline review and approval workflow before any design is committed or code is written.
-
----
-
-## 7. Enriched Requirements Documents (ERDs)
+## 5. Enriched Requirements Documents (ERDs)
 
 An **Enriched Requirements Document** is neither a summary nor a template fill. It is the output of a structured interrogation — ambiguities resolved, decisions explicit, standards applied, every output element traceable to source. The ERD is a living, versioned artifact with a full review and approval lifecycle.
 
@@ -423,7 +318,15 @@ Every Technical ERD includes: framework sections derived from the pipeline · AD
 
 ### Functional ERD *(Phase 2)*
 
-Same interrogation pipeline. Business-aligned output. Architecture characteristics surface as functional quality attributes — Security → data handling policy, Scalability → expected load projections, Availability → service level commitments. Same Decision Ledger, same version and approval history. Business and technical teams start from the same validated ground truth.
+Same interrogation pipeline. Business-aligned output, following recognised business analysis standards:
+
+| Format | Standard | Best Suited For |
+|---|---|---|
+| **BRD** | Business Requirements Document | Stakeholder and business communication — objectives, scope, assumptions, use cases |
+| **FRD** | Functional Requirements Document | Detailed feature-level specification — system behaviour and user interactions |
+| **User Story Map** | Agile epics → stories → acceptance criteria | Agile delivery teams |
+
+Architecture characteristics surface as functional quality attributes — Security → data handling policy, Scalability → expected load projections, Availability → service level commitments. Same Decision Ledger, same version and approval history. Business and technical teams start from the same validated ground truth.
 
 ---
 
@@ -433,59 +336,7 @@ One upload. One pipeline run. Two complete, role-appropriate delivery artifacts 
 
 ---
 
-## 8. Design Principles & Intellectual Foundation
-
-Every prompt rule, schema field, and generated document section traces directly to these sources.
-
----
-
-### Architecture Decision Records
-
-ADRs are a first-class output in every Technical ERD — not an appendix. Format enforced from **Martin Fowler's canonical definition** and **Thoughtworks Lightweight ADR** (Tech Radar 2018 — Adopt):
-
-- Noun-phrase titles · Active-voice decisions ("We will use X") · Every alternative listed with pros *and* cons · Consequences split: benefits and trade-offs separately · Status: Proposed → Accepted → Superseded (never modified, only superseded)
-
-The **Architecture Advice Process** (Thoughtworks Tech Radar Vol. 32, April 2025 — Trial) is the governance rationale: Architecture Review Boards correlate with low organisational performance. Decentralised decisions are safe only when recorded and reviewed — ADRs and Vishwakarma's approval workflow provide that.
-
-> [Martin Fowler — ADR](https://martinfowler.com/bliki/ArchitectureDecisionRecord.html) · [Thoughtworks — Lightweight ADRs](https://www.thoughtworks.com/radar/techniques/lightweight-architecture-decision-records) · [Architecture Advice Process](https://www.thoughtworks.com/radar/techniques/architecture-advice-process)
-
----
-
-### C4 Model
-
-Rules enforced from **Simon Brown's specification**: Context — system boundary, persons, external systems only (max 10 elements, no technology terms); Container — every deployable unit with technology annotation (max 15 elements); all edges include protocol labels; all nodes use C4 bracket notation; Conway's Law check — every container states its owning team, mismatches surfaced as reviewer challenges.
-
-> [C4 Model — Simon Brown](https://c4model.com/introduction) · [Conway's Law — Martin Fowler](https://martinfowler.com/bliki/ConwaysLaw.html)
-
----
-
-### Evolutionary Architecture & Fitness Functions
-
-Every measurable NFR must state how it will be automatically verified in the CI/CD pipeline — from **Building Evolutionary Architectures** (Ford, Parsons, Kua, Sadalage — Thoughtworks / O'Reilly, 2022). *"We need 99.9% availability"* is a wish. *"Verified by a Datadog SLO monitor targeting 99.9% over a 30-day rolling window"* is a fitness function — aligned with **Fitness Function-Driven Development** (Thoughtworks, 2019).
-
-> [Building Evolutionary Architectures](https://www.thoughtworks.com/insights/books/building-evolutionary-architectures-second-edition) · [Fitness Function-Driven Development](https://www.thoughtworks.com/en-us/insights/articles/fitness-function-driven-development)
-
----
-
-### Domain-Driven Design — Decomposition by Business Capability
-
-Decomposition in arc42 Section 5 and C4 Container diagrams enforces **DDD strategic patterns** from **Fowler's Bounded Context**. A frontend/backend/database split violates DDD and Conway's Law simultaneously — it organises by technology layer, not business capability. The engine flags non-capability-aligned decompositions.
-
-> [Bounded Context — Fowler](https://martinfowler.com/bliki/BoundedContext.html) · [Microservices — Fowler & Lewis](https://martinfowler.com/articles/microservices.html) · [Monolith First — Fowler](https://martinfowler.com/bliki/MonolithFirst.html)
-
----
-
-### Technical Debt · Observability · Team Topologies
-
-**Technical Debt:** arc42 Section 11 requires classification by **Fowler's Technical Debt Quadrant** — prudent-deliberate is a trade-off; reckless-deliberate is a liability. The distinction is made explicit in every ERD. → [Technical Debt Quadrant](https://martinfowler.com/bliki/TechnicalDebtQuadrant.html)
-
-**Observability:** All three pillars — logs, metrics, traces — as a unified concern. **OpenTelemetry** (Thoughtworks Tech Radar — Adopt) is the recommended standard. → [Observability as a Leadership Choice](https://www.thoughtworks.com/insights/blog/technology-strategy/drowning-in-dashboards-starving-for-clarity-why-observability-is-a-leadership-choice)
-
-**Team Topologies:** Every C4 container must identify its owning team by type (stream-aligned, platform, enabling, complicated-subsystem) — from **Team Topologies** (Skelton & Pais, 2nd ed. September 2025). → [Team Topologies](https://teamtopologies.com/key-concepts) · [Thoughtworks Tech Radar Vol. 32](https://www.thoughtworks.com/content/dam/thoughtworks/documents/radar/2025/04/tr_technology_radar_vol_32_en.pdf)
-
----
-
-## 9. Platform Capabilities — What Is Built Today
+## 6. Platform Capabilities — What Is Built Today
 
 | Capability | Status |
 |---|---|
@@ -514,12 +365,11 @@ Decomposition in arc42 Section 5 and C4 Container diagrams enforces **DDD strate
 | **Change history** — AI and human changes attributed, timestamped, logged | ✅ Built |
 | Export — ZIP of Markdown, diagrams, ADRs, and approval history; source-control ready | ✅ Built |
 | Track selector — Technical / Functional / Both | ✅ Built |
-| ERD-Functional — business analyst-facing document generation | 🔄 Phase 2 |
-| Dynamic Spec integration — structured ERD handoff to downstream agents | 🔜 Phase 3 |
+| ERD-Functional — BRD · FRD · User Story Map with plain-English diagrams | 🔄 Phase 2 |
 
 ---
 
-## 10. Responsible AI
+## 7. Responsible AI
 
 **The AI proposes. The human decides.** At no point does the platform make an autonomous architectural decision.
 
@@ -533,7 +383,7 @@ Decomposition in arc42 Section 5 and C4 Container diagrams enforces **DDD strate
 
 ---
 
-## 11. Technology Stack
+## 8. Technology Stack
 
 | Layer | Technology |
 |---|---|
@@ -546,7 +396,7 @@ Decomposition in arc42 Section 5 and C4 Container diagrams enforces **DDD strate
 
 ---
 
-## 12. Visual Walkthrough
+## 9. Visual Walkthrough
 
 The complete end-to-end flow from requirements document to approved architecture. Each screenshot below shows a distinct stage in the pipeline — the journey from raw ambiguous text to a reviewed, version-stamped, approved Enriched Requirements Document.
 
@@ -658,34 +508,13 @@ Reviewers comment on specific sections — not the document as a whole. Comments
 
 ### Step 11 — Phase 2 Preview — Functional ERD
 
-Same interrogation pipeline. Business-aligned output. Architecture characteristics are surfaced as functional quality attributes — Security becomes a data handling policy, Scalability becomes expected load projections, Availability becomes service level commitments. Business and technical teams start from the same interrogated, approved source of truth.
+Same interrogation pipeline. Business-aligned output in BRD, FRD, or User Story Map format, with use case, process flow, and user journey diagrams in plain English. Architecture characteristics are surfaced as functional quality attributes — Security becomes a data handling policy, Scalability becomes expected load projections, Availability becomes service level commitments. Business and technical teams start from the same interrogated, approved source of truth.
 
 ![Functional ERD — Phase 2 Preview](images/image-24.png)
 
 ---
 
-## 13. Quick Start
-
-Full setup in **[SETUP.md](SETUP.md)**.
-
-```bash
-# 1. Start the database layer
-docker compose up -d
-
-# 2. Configure and start the backend
-cd app/backend && pip install -e .
-# Add ANTHROPIC_API_KEY to .env
-cd .. && ./start-backend.sh
-
-# 3. Start the frontend
-cd app/frontend && npm install && npm run dev
-
-# → http://localhost:5173
-```
-
----
-
-## 14. References
+## 10. References
 
 The intellectual grounding of the platform — every prompt rule, schema field, and generated document section traces to one of these.
 
