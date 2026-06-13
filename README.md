@@ -54,8 +54,6 @@ Upload the document. Choose the track — Technical, Functional, or Both. Vishwa
 
 One pipeline. Two role-appropriate delivery artifacts. Every prompt rule, schema field, and generated document section enforces a named Thoughtworks engineering principle — ADRs, Architecture Advice Process, Evolutionary Architecture, DDD, Conway's Law, C4 Model, OpenTelemetry. See [Section 4](#4-innovation--novelty) for the full breakdown.
 
-![Generated Technical ERD — Document View with Sections](images/image-12.png)
-
 ### The Impact
 
 | | Today | With Vishwakarma |
