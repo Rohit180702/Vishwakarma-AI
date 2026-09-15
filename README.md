@@ -363,6 +363,7 @@ One upload. One pipeline run. Two complete, role-appropriate delivery artifacts 
 | **Change history** — AI and human changes attributed, timestamped, logged | ✅ Built |
 | Export — ZIP of Markdown, diagrams, ADRs, and approval history; source-control ready | ✅ Built |
 | Track selector — Technical / Functional / Both | ✅ Built |
+| JWT-based authentication — session and LLM-calling routes ownership-scoped per user | ✅ Built |
 | ERD-Functional — BRD · FRD · User Story Map with plain-English diagrams | 🔄 Phase 2 |
 
 ---
@@ -388,9 +389,11 @@ One upload. One pipeline run. Two complete, role-appropriate delivery artifacts 
 | Frontend | React 18 + TypeScript + Vite |
 | Backend | Python 3.11+ + FastAPI + Pydantic v2 |
 | AI Engine | Anthropic Claude — Streaming SSE |
+| Database | MongoDB — Motor (async driver) + Beanie ODM; users, sessions, HLD versions, reviews, comments |
 | Diagrams | Mermaid v11 + ELK Auto-layout |
 | Architecture Standards | arc42 v9 · C4 Model · ADR (MADR) |
-| Session Storage | File-based (demo-ready) |
+| Authentication | JWT bearer tokens; ownership-scoped access on session and LLM-calling routes |
+| Local Storage | File-based — bulky per-session content (spec text, characteristics, HLD JSON) |
 
 ---
 

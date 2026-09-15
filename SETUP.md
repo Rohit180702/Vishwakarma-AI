@@ -119,7 +119,7 @@ MONGODB_DB_NAME=vishwakarma
 DATA_DIR=./data
 
 # JWT secret (generate a random string)
-JWT_SECRET_KEY=your-secret-key-here-change-this
+SECRET_KEY=your-secret-key-here-change-this
 
 # CORS origins (frontend URL)
 CORS_ORIGINS=["http://localhost:5173"]
@@ -128,7 +128,7 @@ CORS_ORIGINS=["http://localhost:5173"]
 **Generate a secure JWT secret:**
 ```bash
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"
-# Copy the output to JWT_SECRET_KEY
+# Copy the output to SECRET_KEY
 ```
 
 #### Start Backend Server
@@ -493,7 +493,7 @@ Set these in production:
 MONGODB_URL=mongodb://prod-host:27017
 
 # Strong JWT secret
-JWT_SECRET_KEY=<generate-strong-random-key>
+SECRET_KEY=<generate-strong-random-key>
 
 # Production API key
 ANTHROPIC_API_KEY=sk-ant-prod-xxxxx
