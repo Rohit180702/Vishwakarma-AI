@@ -18,6 +18,8 @@ from pydantic import BaseModel
 
 from api.deps import get_hld_generation_service, get_llm
 from api.models.requests import GenerateHLDRequest
+from api.routes.auth import get_current_user
+from infrastructure.database import UserDocument
 from infrastructure.llm.anthropic_llm import AnthropicLLM
 from api.models.responses import (
     ADRAlternativeOut, ADROut,
@@ -46,6 +48,7 @@ router = APIRouter(prefix="/hld", tags=["hld"])
 async def generate_hld(
     body: GenerateHLDRequest,
     hld_svc: HLDGenerationService = Depends(get_hld_generation_service),
+    current_user: UserDocument = Depends(get_current_user),
 ) -> GenerateHLDResponse:
     logger.info("[hld] generate — template=%s spec=%d chars", body.template, len(body.spec_text))
     doc = await hld_svc.generate(
@@ -62,6 +65,7 @@ async def generate_hld(
 async def stream_hld(
     body: GenerateHLDRequest,
     hld_svc: HLDGenerationService = Depends(get_hld_generation_service),
+    current_user: UserDocument = Depends(get_current_user),
 ) -> StreamingResponse:
     token_stream = await hld_svc.stream(
         body.spec_text, HLDTemplate(body.template),
@@ -103,7 +107,10 @@ async def stream_hld(
     status_code=status.HTTP_200_OK,
     summary="Run strict quality evaluation on a raw HLD JSON document",
 )
-async def evaluate_hld_doc(body: dict) -> StrictQualityReportOut:
+async def evaluate_hld_doc(
+    body: dict,
+    current_user: UserDocument = Depends(get_current_user),
+) -> StrictQualityReportOut:
     """
     Accepts the raw JSON output of /generate and returns a detailed strict
     quality report without calling the LLM.
@@ -329,6 +336,7 @@ class DiagramQueryResponse(BaseModel):
 async def query_diagram(
     body: DiagramQueryRequest,
     llm: AnthropicLLM = Depends(get_llm),
+    current_user: UserDocument = Depends(get_current_user),
 ) -> DiagramQueryResponse:
     result = await llm.query_diagram(body.question, body.diagram)
     raw_steps = result.get("steps", [])

@@ -161,9 +161,13 @@ export async function streamHLD(
   customSections?: string[],
   customTemplateText?: string,
 ): Promise<void> {
+  const token = getToken()
   const res = await fetch(`${BASE}/hld/generate/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({
       spec_text: specText,
       template,
@@ -369,9 +373,13 @@ export async function streamChat(
   onDone: (edit: HLDEditCommand | null) => void,
   signal?: AbortSignal,
 ): Promise<void> {
+  const token = getToken()
   const res = await fetch(`${BASE}/hld/chat/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({ hld_json: hld, history, message }),
     signal,
   })

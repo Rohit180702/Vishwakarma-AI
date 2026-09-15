@@ -23,9 +23,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from application.interview_service import InterviewService
-from infrastructure.database import HLDSession
+from infrastructure.database import HLDSession, UserDocument
 from infrastructure.session_storage import SessionStorage, get_storage
 from api.deps import get_interview_service
+from api.routes.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,7 @@ async def start_interview(
     body: InterviewStartRequest,
     interview_svc: InterviewService = Depends(get_interview_service),
     storage: SessionStorage = Depends(get_storage),
+    current_user: UserDocument = Depends(get_current_user),
 ) -> InterviewStartResponse:
     session = await HLDSession.get(body.session_id)
     if not session:
@@ -220,6 +222,7 @@ async def start_interview(
 async def submit_answer(
     body: AnswerRequest,
     storage: SessionStorage = Depends(get_storage),
+    current_user: UserDocument = Depends(get_current_user),
 ) -> AnswerResponse:
     session = await HLDSession.get(body.session_id)
     if not session:
@@ -272,6 +275,7 @@ async def submit_answer(
 async def skip_question(
     body: SkipQuestionRequest,
     storage: SessionStorage = Depends(get_storage),
+    current_user: UserDocument = Depends(get_current_user),
 ) -> AnswerResponse:
     session = await HLDSession.get(body.session_id)
     if not session:
@@ -316,6 +320,7 @@ async def skip_question(
 async def skip_all_questions(
     body: SkipAllRequest,
     storage: SessionStorage = Depends(get_storage),
+    current_user: UserDocument = Depends(get_current_user),
 ) -> AnswerResponse:
     session = await HLDSession.get(body.session_id)
     if not session:
@@ -355,6 +360,7 @@ async def skip_all_questions(
 async def get_interview_state(
     session_id: str,
     storage: SessionStorage = Depends(get_storage),
+    current_user: UserDocument = Depends(get_current_user),
 ) -> InterviewStateResponse:
     session = await HLDSession.get(session_id)
     if not session:
@@ -383,6 +389,7 @@ async def get_enhanced_spec(
     session_id: str,
     interview_svc: InterviewService = Depends(get_interview_service),
     storage: SessionStorage = Depends(get_storage),
+    current_user: UserDocument = Depends(get_current_user),
 ) -> EnhancedSpecResponse:
     session = await HLDSession.get(session_id)
     if not session:

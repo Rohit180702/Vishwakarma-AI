@@ -9,11 +9,13 @@ from typing import Optional
 import jwt
 from passlib.context import CryptContext
 
+from config import get_settings
+
 # Password hashing context using bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT configuration
-SECRET_KEY = "your-secret-key-change-in-production"  # TODO: Move to env config
+SECRET_KEY = get_settings().secret_key
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 

@@ -7,11 +7,13 @@ from __future__ import annotations
 import logging
 
 from anthropic import AsyncAnthropic
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
+from api.routes.auth import get_current_user
 from application.llm_utils import extract_json
 from config import get_settings
+from infrastructure.database import UserDocument
 from infrastructure.parser import DocumentParser
 
 logger = logging.getLogger(__name__)
@@ -63,7 +65,10 @@ Return ONLY valid JSON — no markdown fences, no explanation:
     status_code=status.HTTP_200_OK,
     summary="Extract section headings from an uploaded template document",
 )
-async def extract_sections(file: UploadFile = File(...)) -> ExtractSectionsResponse:
+async def extract_sections(
+    file: UploadFile = File(...),
+    current_user: UserDocument = Depends(get_current_user),
+) -> ExtractSectionsResponse:
     filename = file.filename or "untitled"
     raw = await file.read()
 

@@ -40,6 +40,19 @@ async def get_optional_user(
     return await UserDocument.find_one(UserDocument.id == user_id)
 
 
+def _check_session_access(session: HLDSession, current_user: Opt[UserDocument]) -> None:
+    """
+    Raise 403 unless the requester owns the session.
+
+    Sessions created without a logged-in user have author_id=None and remain
+    accessible to anyone, matching the anonymous-upload flow.
+    """
+    if session.author_id is None:
+        return
+    if not current_user or current_user.id != session.author_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this session")
+
+
 # ---------------------------------------------------------------------------
 # Pydantic models
 # ---------------------------------------------------------------------------
@@ -138,10 +151,14 @@ async def list_sessions(current_user: Opt[UserDocument] = Depends(get_optional_u
 
 
 @router.get("/{session_id}", response_model=SessionDetail, summary="Load a session by ID")
-async def get_session_by_id(session_id: str) -> SessionDetail:
+async def get_session_by_id(
+    session_id: str,
+    current_user: Opt[UserDocument] = Depends(get_optional_user),
+) -> SessionDetail:
     session = await HLDSession.get(session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    _check_session_access(session, current_user)
 
     store = get_storage()
 
@@ -280,15 +297,25 @@ async def upload_documents(
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a session")
-async def delete_session(session_id: str) -> None:
+async def delete_session(
+    session_id: str,
+    current_user: Opt[UserDocument] = Depends(get_optional_user),
+) -> None:
     session = await HLDSession.get(session_id)
-    if session:
-        await session.delete()
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    _check_session_access(session, current_user)
+    await session.delete()
     get_storage().delete_session(session_id)
 
 
 @router.delete("/{session_id}/hld", status_code=status.HTTP_204_NO_CONTENT, summary="Clear generated HLD for a session")
-async def delete_session_hld(session_id: str) -> None:
-    if not get_storage().session_exists(session_id):
+async def delete_session_hld(
+    session_id: str,
+    current_user: Opt[UserDocument] = Depends(get_optional_user),
+) -> None:
+    session = await HLDSession.get(session_id)
+    if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    _check_session_access(session, current_user)
     get_storage().delete_hld(session_id)

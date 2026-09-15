@@ -11,7 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.deps import get_impact_service
+from api.routes.auth import get_current_user
 from application.impact_service import ImpactAnalysisService
+from infrastructure.database import UserDocument
 from infrastructure.session_storage import SessionStorage, get_storage
 
 logger = logging.getLogger(__name__)
@@ -61,6 +63,7 @@ async def analyze_solution_impact(
     body: ImpactAnalysisRequest,
     impact_svc: ImpactAnalysisService = Depends(get_impact_service),
     storage: SessionStorage = Depends(get_storage),
+    current_user: UserDocument = Depends(get_current_user),
 ) -> ImpactAnalysisResponse:
     """
     Analyze the impact of choosing a solution vs. the recommended solution.

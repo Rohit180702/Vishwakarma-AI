@@ -11,7 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.deps import get_characteristics_service
+from api.routes.auth import get_current_user
 from application.characteristics_service import CharacteristicsService
+from infrastructure.database import UserDocument
 from infrastructure.session_storage import SessionStorage, get_storage
 
 logger = logging.getLogger(__name__)
@@ -89,6 +91,7 @@ async def detect_characteristics(
     body: DetectRequest,
     char_svc: CharacteristicsService = Depends(get_characteristics_service),
     storage: SessionStorage = Depends(get_storage),
+    current_user: UserDocument = Depends(get_current_user),
 ) -> DetectResponse:
     """
     Analyze specification and detect architectural characteristics.
@@ -150,6 +153,7 @@ async def detect_characteristics(
 async def update_priorities(
     body: UpdatePrioritiesRequest,
     storage: SessionStorage = Depends(get_storage),
+    current_user: UserDocument = Depends(get_current_user),
 ) -> UpdatePrioritiesResponse:
     """
     User manually adjusts characteristic priorities (drag-and-drop reordering).
@@ -220,6 +224,7 @@ async def update_priorities(
 async def get_characteristics(
     session_id: str,
     storage: SessionStorage = Depends(get_storage),
+    current_user: UserDocument = Depends(get_current_user),
 ) -> DetectResponse:
     """Retrieve existing characteristics for a session."""
 

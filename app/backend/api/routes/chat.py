@@ -12,7 +12,9 @@ from fastapi.responses import StreamingResponse
 from api.deps import get_hld_chat_service
 from api.models.requests import ChatRequest
 from api.models.responses import ChatResponse
+from api.routes.auth import get_current_user
 from application.hld_chat import HLDChatService
+from infrastructure.database import UserDocument
 from domain.models import (
     ADR,
     ADRAlternative,
@@ -30,6 +32,7 @@ router = APIRouter(prefix="/hld", tags=["chat"])
 async def chat(
     body: ChatRequest,
     svc: HLDChatService = Depends(get_hld_chat_service),
+    current_user: UserDocument = Depends(get_current_user),
 ) -> ChatResponse:
     hld = _deserialize_hld(body.hld_json)
     reply = await svc.reply(hld, body.history, body.message)
@@ -40,6 +43,7 @@ async def chat(
 async def stream_chat(
     body: ChatRequest,
     svc: HLDChatService = Depends(get_hld_chat_service),
+    current_user: UserDocument = Depends(get_current_user),
 ) -> StreamingResponse:
     hld = _deserialize_hld(body.hld_json)
     token_stream = await svc.stream_reply(hld, body.history, body.message)
