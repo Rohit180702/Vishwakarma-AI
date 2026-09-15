@@ -622,7 +622,7 @@ export function HLDOutput({
                     setErdTab(e.target.value as ErdTab)
                     setView('document')
                   }}
-                  aria-label="Switch ERD track"
+                  aria-label="Switch HLD track"
                 >
                   <option value="technical">Technical — Enriched Requirements Document</option>
                   <option value="functional">Functional — Enriched Requirements Document</option>
