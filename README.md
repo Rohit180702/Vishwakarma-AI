@@ -4,7 +4,7 @@
 
 **A Requirements Enrichment Platform — one ambiguous requirements document in, one standards-backed Enriched Requirements Document (ERD) out. Technical track for architects today. Functional track for business analysts in Phase 2. One interrogation. Two consistent delivery artifacts. Your entire delivery team covered from a single source of truth.**
 
-*[Setup Guide](SETUP.md) · [Report Issues](https://github.com/rohit18-tw/vishwakarma/issues)*
+*[Setup Guide](SETUP.md) · [Report Issues](https://github.com/Rohit180702/Vishwakarma-AI/issues)*
 
 ## Quick Start
 
